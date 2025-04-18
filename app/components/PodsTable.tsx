@@ -125,7 +125,7 @@ export default function PodsTable({ pods }: PodsTableProps) {
 
   return (
     <>
-      <Grid container spacing={2} sx={{ mb: 2 }}>
+      <Grid container spacing={1} sx={{ mb: 1 }}>
         <Grid item xs={8}>
           <TextField
             fullWidth
@@ -137,15 +137,17 @@ export default function PodsTable({ pods }: PodsTableProps) {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon />
+                  <SearchIcon fontSize="small" />
                 </InputAdornment>
               ),
+              style: { fontSize: '0.8rem' }
             }}
+            sx={{ '& .MuiInputBase-root': { height: '32px' } }}
           />
         </Grid>
         <Grid item xs={4}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="namespace-filter-label">Namespace</InputLabel>
+          <FormControl fullWidth size="small" sx={{ '& .MuiInputBase-root': { height: '32px', fontSize: '0.8rem' } }}>
+            <InputLabel id="namespace-filter-label" sx={{ fontSize: '0.8rem' }}>Namespace</InputLabel>
             <Select
               labelId="namespace-filter-label"
               id="namespace-filter"
@@ -154,7 +156,7 @@ export default function PodsTable({ pods }: PodsTableProps) {
               onChange={(e) => setNamespaceFilter(e.target.value)}
             >
               {namespaces.map((namespace) => (
-                <MenuItem key={namespace} value={namespace}>
+                <MenuItem key={namespace} value={namespace} sx={{ fontSize: '0.8rem' }}>
                   {namespace === 'all' ? 'All Namespaces' : namespace}
                 </MenuItem>
               ))}
@@ -163,14 +165,21 @@ export default function PodsTable({ pods }: PodsTableProps) {
         </Grid>
       </Grid>
 
-      <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
-        <Table stickyHeader aria-label="pods table">
+      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 250px)' }}>
+        <Table stickyHeader size="small" aria-label="pods table">
           <TableHead>
             <TableRow>
               {headCells.map((headCell) => (
                 <TableCell
                   key={headCell.id}
                   sortDirection={orderBy === headCell.id ? order : false}
+                  sx={{ 
+                    backgroundColor: 'background.paper',
+                    py: 0.75,
+                    px: 1,
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold'
+                  }}
                 >
                   {headCell.sortable ? (
                     <TableSortLabel
@@ -190,7 +199,7 @@ export default function PodsTable({ pods }: PodsTableProps) {
           <TableBody>
             {sortedPods.map((pod) => (
               <TableRow key={`${pod.namespace}-${pod.name}`} hover>
-                <TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>
                   <Tooltip title={pod.name}>
                     <Box sx={{ 
                       maxWidth: 200, 
@@ -202,28 +211,19 @@ export default function PodsTable({ pods }: PodsTableProps) {
                     </Box>
                   </Tooltip>
                 </TableCell>
-                <TableCell>
-                  <Chip 
-                    label={pod.namespace} 
-                    size="small" 
-                    sx={{ 
-                      bgcolor: pod.namespace === 'default' ? 'primary.light' : 'secondary.light',
-                      '& .MuiChip-label': { px: 1 }
-                    }} 
-                  />
-                </TableCell>
-                <TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{pod.namespace}</TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     {getStatusIcon(pod.status)}
-                    <span style={{ marginLeft: '8px' }}>{pod.status}</span>
+                    <Box component="span" sx={{ ml: 0.5 }}>{pod.status}</Box>
                   </Box>
                 </TableCell>
-                <TableCell>{pod.helmChart || '-'}</TableCell>
-                <TableCell>{pod.helmVersion || '-'}</TableCell>
-                <TableCell>{pod.cpuUsage}</TableCell>
-                <TableCell>{pod.memoryUsage}</TableCell>
-                <TableCell>{pod.nodeName}</TableCell>
-                <TableCell>{pod.creationTimestamp}</TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{pod.helmChart || '-'}</TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{pod.helmVersion || '-'}</TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{pod.cpuUsage}</TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{pod.memoryUsage}</TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{pod.nodeName}</TableCell>
+                <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{pod.creationTimestamp}</TableCell>
               </TableRow>
             ))}
             {sortedPods.length === 0 && (

@@ -25,16 +25,16 @@ export default function ClusterList({
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress size={24} />
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
+        <CircularProgress size={20} />
       </Box>
     );
   }
 
   if (clusters.length === 0) {
     return (
-      <Box sx={{ p: 2, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
+      <Box sx={{ p: 1, textAlign: 'center' }}>
+        <Typography variant="body2" color="text.secondary" fontSize="0.75rem">
           No Kubernetes clusters found
         </Typography>
       </Box>
@@ -113,59 +113,93 @@ export default function ClusterList({
 
   return (
     <>
-      <Typography variant="h6" sx={{ mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ mb: 1, fontSize: '0.9rem', fontWeight: 'bold' }}>
         Clusters
       </Typography>
-      <Divider sx={{ mb: 2 }} />
-      <List sx={{ p: 0 }}>
+      <Divider sx={{ mb: 1 }} />
+      <List sx={{ p: 0 }} dense>
         {clusters.map((cluster) => (
           <ListItem 
             key={cluster.name} 
             disablePadding
-            secondaryAction={
-              <IconButton 
-                edge="end" 
-                aria-label="edit"
-                onClick={(e) => handleEditClick(e, cluster)}
-                size="small"
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            }
-            sx={{ pr: 6 }} // Add padding for the edit button
+            sx={{ 
+              pr: 0,  // Remove right padding so selection color extends fully
+              '&:hover': {
+                '& .MuiIconButton-root': { 
+                  visibility: 'visible'
+                }
+              }
+            }}
           >
             <ListItemButton
               selected={selectedCluster?.name === cluster.name}
               onClick={() => onSelectCluster(cluster)}
               sx={{
                 borderRadius: 1,
-                mb: 0.5,
+                py: 0.5,
+                px: 1,
+                minHeight: '36px',
+                mb: 0.2,
+                width: '100%',
+                pr: 6, // Add right padding to make room for the button
                 '&.Mui-selected': {
-                  backgroundColor: 'primary.light',
+                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
                   '&:hover': {
-                    backgroundColor: 'primary.light',
+                    backgroundColor: 'rgba(25, 118, 210, 0.12)',
                   },
                 },
               }}
             >
-              <CloudIcon sx={{ mr: 1, color: 'primary.main' }} fontSize="small" />
+              <CloudIcon 
+                sx={{ 
+                  mr: 0.5, 
+                  color: selectedCluster?.name === cluster.name ? 'primary.main' : 'primary.light',
+                  fontSize: '0.85rem'
+                }} 
+              />
               <ListItemText 
                 primary={cluster.displayName || cluster.name} 
                 secondary={cluster.server}
                 primaryTypographyProps={{
-                  variant: 'body1',
+                  variant: 'body2',
                   fontWeight: selectedCluster?.name === cluster.name ? 'bold' : 'normal',
                   noWrap: true,
-                  sx: { maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }
+                  fontSize: '0.8rem',
+                  sx: { 
+                    maxWidth: '100%', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis',
+                    color: selectedCluster?.name === cluster.name ? 'primary.main' : 'text.primary'
+                  }
                 }}
                 secondaryTypographyProps={{
                   noWrap: true,
                   variant: 'body2',
-                  fontSize: '0.75rem',
+                  fontSize: '0.65rem',
                   sx: { maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }
                 }}
-                sx={{ overflow: 'hidden' }}
+                sx={{ 
+                  overflow: 'hidden',
+                  margin: 0
+                }}
               />
+              <IconButton 
+                edge="end" 
+                aria-label="edit"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditClick(e, cluster);
+                }}
+                size="small"
+                sx={{ 
+                  padding: '2px',
+                  position: 'absolute',
+                  right: 8,
+                  visibility: selectedCluster?.name === cluster.name ? 'visible' : 'hidden'
+                }}
+              >
+                <EditIcon fontSize="inherit" sx={{ fontSize: '0.85rem' }} />
+              </IconButton>
             </ListItemButton>
           </ListItem>
         ))}

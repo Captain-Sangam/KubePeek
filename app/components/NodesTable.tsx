@@ -164,50 +164,55 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
   return (
     <>
       <TableRow sx={{ '& > *': { borderBottom: 'unset' } }}>
-        <TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="body2" sx={{ fontWeight: 'medium', cursor: 'pointer' }} onClick={() => onNodeSelect(node.name)}>
+            <Typography variant="body2" sx={{ 
+              fontWeight: 'medium', 
+              cursor: 'pointer',
+              fontSize: '0.75rem' 
+            }} onClick={() => onNodeSelect(node.name)}>
               {node.name}
             </Typography>
           </Box>
         </TableCell>
-        <TableCell>{node.instanceType || 'Unknown'}</TableCell>
-        <TableCell>{node.capacity.cpu}</TableCell>
-        <TableCell>{node.capacity.memory}</TableCell>
-        <TableCell>
+        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{node.instanceType || 'Unknown'}</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{node.capacity.cpu}</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{node.capacity.memory}</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={cpuUsagePercent} 
-                sx={{ height: 8, borderRadius: 5 }}
+                sx={{ height: 6, borderRadius: 3 }}
                 color={cpuUsagePercent > 80 ? 'error' : cpuUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 35 }}>
-              <Typography variant="body2" color="text.secondary">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 30 }}>
+              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={memUsagePercent} 
-                sx={{ height: 8, borderRadius: 5 }}
+                sx={{ height: 6, borderRadius: 3 }}
                 color={memUsagePercent > 80 ? 'error' : memUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 35 }}>
-              <Typography variant="body2" color="text.secondary">{`${memUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 30 }}>
+              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${memUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell>{node.pods}</TableCell>
-        <TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>{node.pods}</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <IconButton
             aria-label="expand row"
             size="small"
             onClick={handleExpandClick}
+            sx={{ p: 0.5, mr: 0.5 }}
           >
-            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
       </TableRow>
@@ -311,59 +316,72 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
 
   return (
     <>
-      <TableRow sx={{ '& > *': { borderBottom: 'unset' }, bgcolor: 'rgba(0, 0, 0, 0.04)' }}>
-        <TableCell>
+      <TableRow sx={{ 
+        '&:hover': { bgcolor: 'action.hover' },
+        bgcolor: expanded ? 'rgba(0, 0, 0, 0.04)' : 'inherit',
+        '& > *:last-child': { pr: 1 }  // Ensure proper padding on the last cell
+      }}>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <IconButton
+              aria-label="expand row"
+              size="small"
+              onClick={handleExpandClick}
+              sx={{ p: 0.5, mr: 0.5 }}
+            >
+              {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+            </IconButton>
             <Typography 
-              variant="body1" 
+              variant="body2" 
               sx={{ 
                 fontWeight: 'bold', 
                 cursor: 'pointer',
-                '&:hover': { textDecoration: 'underline' }
-              }}
+                fontSize: '0.75rem' 
+              }} 
               onClick={() => onNodeGroupSelect(nodeGroup.name)}
             >
               {nodeGroup.name}
             </Typography>
           </Box>
         </TableCell>
-        <TableCell>Group ({nodeGroup.nodes.length} nodes)</TableCell>
-        <TableCell>{nodeGroup.totalCpu}</TableCell>
-        <TableCell>{nodeGroup.totalMemory}</TableCell>
-        <TableCell>
+        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>Group ({nodeGroup.nodes.length} nodes)</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{nodeGroup.totalCpu}</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{nodeGroup.totalMemory}</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={cpuUsagePercent} 
-                sx={{ height: 8, borderRadius: 5 }}
+                sx={{ height: 6, borderRadius: 3 }}
                 color={cpuUsagePercent > 80 ? 'error' : cpuUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 35 }}>
-              <Typography variant="body2" color="text.secondary">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 30 }}>
+              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={memUsagePercent} 
-                sx={{ height: 8, borderRadius: 5 }}
+                sx={{ height: 6, borderRadius: 3 }}
                 color={memUsagePercent > 80 ? 'error' : memUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 35 }}>
-              <Typography variant="body2" color="text.secondary">{`${memUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 30 }}>
+              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${memUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell>{nodeGroup.podsCount}</TableCell>
-        <TableCell>
+        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{nodeGroup.podsCount}</TableCell>
+        <TableCell sx={{ py: 0.5, px: 1 }}>
           <IconButton
             aria-label="expand row"
             size="small"
             onClick={handleExpandClick}
+            sx={{ p: 0.5, mr: 0.5 }}
           >
-            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
       </TableRow>
@@ -428,6 +446,7 @@ export default function NodesTable({
 }: NodesTableProps) {
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<keyof Node>('name');
+  const [viewMode, setViewMode] = useState<'nodes' | 'nodeGroups'>('nodeGroups');
 
   const handleRequestSort = (property: keyof Node) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -451,42 +470,94 @@ export default function NodesTable({
     }
   });
 
+  const sortedNodeGroups = [...nodeGroups].sort((a, b) => {
+    let aValue: any = a.name;
+    let bValue: any = b.name;
+
+    if (orderBy === 'name') {
+      aValue = a.name.toLowerCase();
+      bValue = b.name.toLowerCase();
+    }
+
+    if (order === 'desc') {
+      return bValue < aValue ? -1 : bValue > aValue ? 1 : 0;
+    } else {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    }
+  });
+
   return (
-    <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
-      <Table stickyHeader aria-label="nodes table">
-        <TableHead>
-          <TableRow>
-            {headCells.map((headCell) => (
-              <TableCell
-                key={headCell.id}
-                sortDirection={orderBy === headCell.id ? order : false}
-              >
-                {headCell.sortable ? (
-                  <TableSortLabel
-                    active={orderBy === headCell.id}
-                    direction={orderBy === headCell.id ? order : 'asc'}
-                    onClick={() => handleRequestSort(headCell.id as keyof Node)}
-                  >
-                    {headCell.label}
-                  </TableSortLabel>
-                ) : (
-                  headCell.label
-                )}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {nodeGroups.map((nodeGroup) => (
-            <NodeGroupRow 
-              key={nodeGroup.name} 
-              nodeGroup={nodeGroup} 
-              onNodeSelect={onNodeSelect}
-              onNodeGroupSelect={onNodeGroupSelect}
-            />
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Chip
+            label="Node Groups"
+            color={viewMode === 'nodeGroups' ? 'primary' : 'default'}
+            onClick={() => setViewMode('nodeGroups')}
+            size="small"
+          />
+          <Chip
+            label="Individual Nodes"
+            color={viewMode === 'nodes' ? 'primary' : 'default'}
+            onClick={() => setViewMode('nodes')}
+            size="small"
+          />
+        </Box>
+      </Box>
+
+      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 180px)' }}>
+        <Table stickyHeader size="small" sx={{ minWidth: 650 }}>
+          <TableHead>
+            <TableRow>
+              {headCells.map((headCell) => (
+                <TableCell
+                  key={headCell.id + headCell.label}
+                  sortDirection={orderBy === headCell.id ? order : false}
+                  sx={{ 
+                    backgroundColor: 'background.paper',
+                    py: 0.75,
+                    px: 1,
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {headCell.sortable ? (
+                    <TableSortLabel
+                      active={orderBy === headCell.id}
+                      direction={orderBy === headCell.id ? order : 'asc'}
+                      onClick={() => handleRequestSort(headCell.id as keyof Node)}
+                    >
+                      {headCell.label}
+                    </TableSortLabel>
+                  ) : (
+                    headCell.label
+                  )}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {viewMode === 'nodeGroups' ? (
+              sortedNodeGroups.map((nodeGroup) => (
+                <NodeGroupRow 
+                  key={nodeGroup.name}
+                  nodeGroup={nodeGroup}
+                  onNodeSelect={onNodeSelect}
+                  onNodeGroupSelect={onNodeGroupSelect}
+                />
+              ))
+            ) : (
+              sortedNodes.map((node) => (
+                <NodeRow 
+                  key={node.name} 
+                  node={node} 
+                  onNodeSelect={onNodeSelect} 
+                />
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 } 

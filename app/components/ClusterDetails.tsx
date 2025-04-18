@@ -21,7 +21,7 @@ function TabPanel(props: TabPanelProps) {
       hidden={value !== index}
       id={`simple-tabpanel-${index}`}
       aria-labelledby={`simple-tab-${index}`}
-      sx={{ p: 2, pt: 3 }}
+      sx={{ p: 1, pt: 2 }}
       {...other}
     >
       {value === index && children}
@@ -161,14 +161,14 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <CircularProgress />
+        <CircularProgress size={24} />
       </Box>
     );
   }
 
   if (error) {
     return (
-      <Alert severity="error" sx={{ m: 2 }}>
+      <Alert severity="error" sx={{ m: 1, py: 0.5, fontSize: '0.8rem' }}>
         {error}
       </Alert>
     );
@@ -176,10 +176,10 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
 
   return (
     <Box sx={{ height: '100%' }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ mb: 1, fontSize: '1rem', fontWeight: 'bold' }}>
         {cluster.displayName || cluster.name}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontSize: '0.75rem' }}>
         {cluster.server}
         {cluster.displayName && (
           <Box component="span" sx={{ ml: 1, color: 'text.disabled' }}>
@@ -189,7 +189,18 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
       </Typography>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tabValue} onChange={handleTabChange}>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange}
+          sx={{ 
+            minHeight: '36px',
+            '& .MuiTab-root': {
+              minHeight: '36px',
+              fontSize: '0.75rem',
+              padding: '6px 12px'
+            }
+          }}
+        >
           <Tab label="Nodes" />
           <Tab label="Pods" />
         </Tabs>
@@ -205,15 +216,15 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
       </TabPanel>
 
       <TabPanel value={tabValue} index={1}>
-        <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 1 }}>
           {(selectedNode || selectedNodeGroup) && (
             <Alert 
               severity="info" 
-              sx={{ mb: 2 }}
+              sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }}
               action={
                 <Typography 
                   variant="body2" 
-                  sx={{ cursor: 'pointer', textDecoration: 'underline' }}
+                  sx={{ cursor: 'pointer', textDecoration: 'underline', fontSize: '0.75rem' }}
                   onClick={clearFilters}
                 >
                   Clear filters

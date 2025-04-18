@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, Grid, Paper, Alert } from '@mui/material';
+import { Box, Grid, Paper, Alert, Typography } from '@mui/material';
 import ClusterList from './ClusterList';
 import ClusterDetails from './ClusterDetails';
 import { Cluster } from '../types/kubernetes';
@@ -54,17 +54,17 @@ export default function Dashboard() {
   return (
     <Box sx={{ height: '100%' }}>
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 1, py: 0.5, fontSize: '0.8rem' }}>
           {error}
         </Alert>
       )}
       
-      <Grid container spacing={2} sx={{ height: 'calc(100% - 8px)' }}>
+      <Grid container spacing={1} sx={{ height: 'calc(100% - 4px)' }}>
         <Grid item xs={12} md={3} lg={2} sx={{ height: '100%' }}>
           <Paper sx={{ 
             height: '100%', 
             overflow: 'hidden', 
-            p: 2,
+            p: 1,
             display: 'flex',
             flexDirection: 'column'
           }}>
@@ -78,12 +78,14 @@ export default function Dashboard() {
         </Grid>
         
         <Grid item xs={12} md={9} lg={10} sx={{ height: '100%' }}>
-          <Paper sx={{ height: '100%', overflow: 'auto', p: 2 }}>
+          <Paper sx={{ height: '100%', overflow: 'auto', p: 1.5 }}>
             {selectedCluster ? (
               <ClusterDetails cluster={selectedCluster} />
             ) : (
-              <Box sx={{ p: 2, textAlign: 'center' }}>
-                {loading ? 'Loading clusters...' : clusters.length === 0 ? 'No clusters found' : 'Select a cluster to view details'}
+              <Box sx={{ p: 1, textAlign: 'center' }}>
+                <Typography variant="body2" fontSize="0.8rem">
+                  {loading ? 'Loading clusters...' : clusters.length === 0 ? 'No clusters found' : 'Select a cluster to view details'}
+                </Typography>
               </Box>
             )}
           </Paper>
