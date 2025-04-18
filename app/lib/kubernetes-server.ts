@@ -787,4 +787,98 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
     console.error('Error getting pods:', error);
     throw error;
   }
+};
+
+// Delete a pod
+export const deletePod = async (clusterName: string, namespace: string, podName: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const { coreClient } = getClientForCluster(clusterName);
+    await coreClient.deleteNamespacedPod(podName, namespace);
+    return { success: true, message: `Pod ${namespace}/${podName} deleted successfully` };
+  } catch (error) {
+    console.error(`Error deleting pod ${namespace}/${podName}:`, error);
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : 'Unknown error occurred while deleting pod'
+    };
+  }
+};
+
+// Get pod logs
+export const getPodLogs = async (
+  clusterName: string, 
+  namespace: string, 
+  podName: string,
+  containerName?: string,
+  tailLines?: number
+): Promise<{ success: boolean; logs?: string; message?: string }> => {
+  try {
+    const { coreClient } = getClientForCluster(clusterName);
+    
+    // If container name is not provided, get all container logs
+    if (!containerName) {
+      // First get the pod to find all containers
+      const { body: pod } = await coreClient.readNamespacedPod(podName, namespace);
+      const containerNames = pod.spec?.containers.map(c => c.name) || [];
+      
+      // Get logs for each container
+      let allLogs = '';
+      for (const container of containerNames) {
+        try {
+          const { body } = await coreClient.readNamespacedPodLog(
+            podName, 
+            namespace, 
+            container,
+            undefined, // pretty
+            undefined, // follow
+            tailLines
+          );
+          allLogs += `\n--- Container: ${container} ---\n${body}\n`;
+        } catch (containerError) {
+          allLogs += `\n--- Container: ${container} ---\nError fetching logs: ${
+            containerError instanceof Error ? containerError.message : 'Unknown error'
+          }\n`;
+        }
+      }
+      return { success: true, logs: allLogs };
+    }
+    
+    // Get logs for a specific container
+    const { body } = await coreClient.readNamespacedPodLog(
+      podName, 
+      namespace, 
+      containerName,
+      undefined, // pretty
+      undefined, // follow
+      tailLines
+    );
+    
+    return { success: true, logs: body };
+  } catch (error) {
+    console.error(`Error getting logs for pod ${namespace}/${podName}:`, error);
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching logs' 
+    };
+  }
+};
+
+// Get pod details (describe pod equivalent)
+export const getPodDetails = async (
+  clusterName: string, 
+  namespace: string, 
+  podName: string
+): Promise<{ success: boolean; details?: any; message?: string }> => {
+  try {
+    const { coreClient } = getClientForCluster(clusterName);
+    const { body: pod } = await coreClient.readNamespacedPod(podName, namespace);
+    
+    return { success: true, details: pod };
+  } catch (error) {
+    console.error(`Error getting details for pod ${namespace}/${podName}:`, error);
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching pod details' 
+    };
+  }
 }; 
