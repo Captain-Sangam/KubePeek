@@ -201,7 +201,7 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
                 fontWeight: 'medium', 
                 cursor: 'pointer',
                 fontSize: '0.75rem',
-                color: mode === 'light' ? '#212121' : '#e0e0e0'
+                color: mode === 'light' ? '#000000' : '#e0e0e0'
               }} 
               onClick={() => onNodeSelect(node.name)}
               title={node.name}
@@ -456,7 +456,7 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
                 e.stopPropagation();
                 handleExpandClick();
               }}
-              sx={{ mr: 1, color: mode === 'light' ? 'inherit' : '#e0e0e0', flexShrink: 0 }}
+              sx={{ mr: 1, color: mode === 'light' ? '#333333' : '#e0e0e0', flexShrink: 0 }}
             >
               {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </IconButton>
@@ -465,7 +465,7 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
               className="node-group-name"
               sx={{ 
                 fontWeight: 500,
-                color: mode === 'light' ? '#212121' : '#e0e0e0',
+                color: mode === 'light' ? '#000000' : '#e0e0e0',
                 fontSize: '0.75rem'
               }}
               onClick={handleExpandClick}
@@ -738,8 +738,8 @@ export default function NodesTable({
                       fontWeight: 600, 
                       py: 1.5,
                       fontSize: '0.75rem',
-                      color: mode === 'light' ? '#212121' : '#e0e0e0',
-                      backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.05)',
+                      color: mode === 'light' ? '#000000' : '#e0e0e0',
+                      backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.05)',
                       width: width,
                       maxWidth: width
                     }}
