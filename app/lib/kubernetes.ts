@@ -6,6 +6,7 @@ import * as https from 'https';
 import * as http from 'http';
 import * as url from 'url';
 import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
+import { Options } from 'request';
 
 // Helper function to parse CPU values from Kubernetes format
 const parseCpuValue = (cpuStr: string): string => {
@@ -201,7 +202,16 @@ const formatNodeGroupMemory = (memStr: string): string => {
   
   // Always convert to Gi for nodegroups
   const gigabytes = mem / (1024 * 1024 * 1024);
-  return `${gigabytes.toFixed(0)}Gi`;
+  
+  console.log(`formatNodeGroupMemory: Converting ${mem} bytes to ${gigabytes.toFixed(2)} Gi`);
+  
+  // If the value is less than 1 Gi but not 0, show it with 1 decimal place
+  if (gigabytes < 1 && gigabytes > 0) {
+    return `${gigabytes.toFixed(1)}Gi`;
+  }
+  
+  // For larger values, round to the nearest integer
+  return `${Math.round(gigabytes)}Gi`;
 };
 
 // Use Node.js native https module to make requests without certificate validation
@@ -342,7 +352,11 @@ export const getClientForCluster = (clusterName: string): {
       getNodeMetrics: async () => {
         try {
           // Use request library directly instead of the client
-          const opts = {}; 
+          const opts: Options = {
+            url: `${cluster.server}/apis/metrics.k8s.io/v1beta1/nodes`,
+            method: 'GET',
+            json: true
+          }; 
           kc.applyToRequest(opts);
           
           // Use our custom fetch function with SSL options
@@ -384,7 +398,11 @@ export const getClientForCluster = (clusterName: string): {
       getPodMetrics: async () => {
         try {
           // Use request library directly instead of the client
-          const opts = {};
+          const opts: Options = {
+            url: `${cluster.server}/apis/metrics.k8s.io/v1beta1/pods`,
+            method: 'GET',
+            json: true
+          };
           kc.applyToRequest(opts);
           
           // Use our custom fetch function with SSL options
@@ -463,7 +481,7 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
     
     // Get metrics for nodes
     console.log('Fetching node metrics...');
-    let nodeMetrics = { items: [] };
+    let nodeMetrics: { items: Array<{ metadata?: { name?: string }, usage?: { cpu?: string, memory?: string } }> } = { items: [] };
     try {
       const metricsResponse = await metricsClient.getNodeMetrics();
       nodeMetrics = metricsResponse.body;
@@ -475,7 +493,7 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
     
     // Get pods for each node
     console.log('Fetching pods...');
-    let pods = [];
+    let pods: Array<{ metadata?: { name?: string, namespace?: string }, spec?: { nodeName?: string } }> = [];
     try {
       const podsResponse = await coreClient.listPodForAllNamespaces();
       pods = podsResponse.body.items;
@@ -584,7 +602,9 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
 // Group nodes by label
 export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[]> => {
   try {
+    console.log("=== START NODE GROUP CALCULATION ===");
     const nodes = await getNodes(clusterName);
+    console.log(`Retrieved ${nodes.length} nodes for nodegroup calculation`);
     
     // Create a map of node groups
     const nodeGroups = new Map<string, NodeGroupInfo>();
@@ -623,7 +643,9 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
           totalMemory: '0',
           usedCpu: '0',
           usedMemory: '0',
-          podsCount: 0
+          podsCount: 0,
+          cpuPercentage: 0,
+          memPercentage: 0
         };
         nodeGroups.set(nodeGroupName, nodeGroup);
       }
@@ -632,30 +654,35 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
       nodeGroup.nodes.push(node);
       
       try {
-        // Parse raw memory values directly from Kubernetes format
-        const memCapacityBytes = parseFloat(parseMemoryValue(node.allocatable.memory));
-        const memUsageBytes = parseFloat(parseMemoryValue(node.usage.memory));
+        // Get CPU capacity and usage from node data
         const cpuCapacity = parseFloat(parseCpuValue(node.capacity.cpu));
         const cpuUsage = parseFloat(parseCpuValue(node.usage.cpu));
-        
-        // Ensure usage doesn't exceed capacity
-        const validatedMemUsage = Math.min(memUsageBytes, memCapacityBytes);
         const validatedCpuUsage = Math.min(cpuUsage, cpuCapacity);
         
-        // Get memory percentage
-        const memPercent = memCapacityBytes > 0 ? (validatedMemUsage / memCapacityBytes) * 100 : 0;
+        // Get memory values directly from the node's allocatable & capacity field
+        // For true capacity, use the capacity field rather than allocatable
+        // which can be less due to system reservations
+        const memCapacityBytes = parseFloat(parseMemoryValue(node.capacity.memory));
+        // Convert to Gi for easier debugging
+        const memCapacityGi = memCapacityBytes / (1024 * 1024 * 1024);
         
-        // Debug log for each node's memory calculation
-        console.log(`NodeGroup ${nodeGroup.name}, Node ${node.name} Memory:`);
-        console.log(`  Allocatable: ${node.allocatable.memory} (${memCapacityBytes} bytes)`);
-        console.log(`  Usage: ${node.usage.memory} (${memUsageBytes} bytes)`);
-        console.log(`  Validated: ${validatedMemUsage} bytes (${memPercent.toFixed(2)}%)`);
+        // Get memory usage
+        const memUsageBytes = parseFloat(parseMemoryValue(node.usage.memory));
+        const validatedMemUsage = Math.min(memUsageBytes, memCapacityBytes);
         
-        // Update group metrics with validated values
+        console.log(`Node ${node.name} (${node.instanceType}): Memory Capacity=${formatMemoryForDisplay(node.capacity.memory)} (${memCapacityGi.toFixed(2)}Gi)`);
+        console.log(`Allocatable: ${node.allocatable.memory}, Usage: ${node.usage.memory}`);
+        
+        // Add values to node group totals
         nodeGroup.totalCpu = (parseFloat(nodeGroup.totalCpu) + cpuCapacity).toString();
-        nodeGroup.totalMemory = (parseFloat(nodeGroup.totalMemory) + memCapacityBytes).toString();
         nodeGroup.usedCpu = (parseFloat(nodeGroup.usedCpu) + validatedCpuUsage).toString();
+        nodeGroup.totalMemory = (parseFloat(nodeGroup.totalMemory) + memCapacityBytes).toString();
         nodeGroup.usedMemory = (parseFloat(nodeGroup.usedMemory) + validatedMemUsage).toString();
+        
+        // Log updated group totals
+        const groupTotalGi = parseFloat(nodeGroup.totalMemory) / (1024 * 1024 * 1024);
+        console.log(`NodeGroup ${nodeGroupName} now has ${nodeGroup.nodes.length} nodes, ${groupTotalGi.toFixed(2)}Gi total memory`);
+        
       } catch (error) {
         console.error(`Error calculating node metrics for ${node.name}:`, error);
       }
@@ -663,67 +690,67 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
       nodeGroup.podsCount += node.pods;
     });
     
-    // Format values for display
-    nodeGroups.forEach(nodeGroup => {
+    console.log("=== FORMATTING NODE GROUP VALUES ===");
+    
+    // Convert map to array and format values
+    const formattedNodeGroups = Array.from(nodeGroups.values()).map(nodeGroup => {
       try {
-        // Get the raw memory and CPU values (in bytes and cores)
-        const rawMemoryUsed = parseFloat(nodeGroup.usedMemory);
-        const rawMemoryTotal = parseFloat(nodeGroup.totalMemory);
-        const rawCpuUsed = parseFloat(nodeGroup.usedCpu);
-        const rawCpuTotal = parseFloat(nodeGroup.totalCpu);
+        // Get raw values for calculations
+        const totalCpu = parseFloat(nodeGroup.totalCpu);
+        const usedCpu = parseFloat(nodeGroup.usedCpu);
+        const totalMemory = parseFloat(nodeGroup.totalMemory);
+        const usedMemory = parseFloat(nodeGroup.usedMemory);
         
-        // Calculate percentages accurately
-        let memPercent = 0;
-        let cpuPercent = 0;
+        // Calculate percentages
+        const cpuPercentage = totalCpu > 0 ? Math.min(Math.round((usedCpu / totalCpu) * 100), 100) : 0;
+        const memPercentage = totalMemory > 0 ? Math.min(Math.round((usedMemory / totalMemory) * 100), 100) : 0;
         
-        if (rawMemoryTotal > 0) {
-          memPercent = (rawMemoryUsed / rawMemoryTotal) * 100;
-        }
+        // Format values for display
+        const formattedTotalCpu = formatCpuForDisplay(nodeGroup.totalCpu);
+        const formattedUsedCpu = formatCpuForDisplay(nodeGroup.usedCpu);
         
-        if (rawCpuTotal > 0) {
-          cpuPercent = (rawCpuUsed / rawCpuTotal) * 100;
-        }
+        // Convert memory to Gi directly for display
+        const totalMemoryGi = totalMemory / (1024 * 1024 * 1024);
+        // Ensure we don't show partial gigabytes for node groups
+        const totalMemoryDisplay = `${Math.round(totalMemoryGi)}Gi`;
         
-        // Use the actual calculated percentages rather than random values
-        nodeGroup.memPercentage = Math.min(memPercent, 100);
-        nodeGroup.cpuPercentage = Math.min(cpuPercent, 100);
+        console.log(`NodeGroup ${nodeGroup.name}: ${nodeGroup.nodes.length} nodes, CPU=${formattedUsedCpu}/${formattedTotalCpu}, Memory=${totalMemoryDisplay}`);
         
-        // Log the calculations for debugging
-        console.log(`NodeGroup ${nodeGroup.name} percentages calculation:`);
-        console.log(`  Memory: ${rawMemoryUsed}/${rawMemoryTotal} bytes = ${memPercent.toFixed(2)}%, setting to ${nodeGroup.memPercentage.toFixed(2)}%`);
-        console.log(`  CPU: ${rawCpuUsed}/${rawCpuTotal} cores = ${cpuPercent.toFixed(2)}%`);
-        
-        // Format CPU and memory values for display
-        nodeGroup.totalCpu = formatCpuForDisplay(nodeGroup.totalCpu);
-        nodeGroup.usedCpu = formatCpuForDisplay(nodeGroup.usedCpu);
-        
-        // Use special nodegroup memory formatting
-        nodeGroup.totalMemory = formatNodeGroupMemory(nodeGroup.totalMemory);
-        nodeGroup.usedMemory = formatNodeGroupMemory(nodeGroup.usedMemory);
-        
-        console.log(`NodeGroup ${nodeGroup.name} final display values:`);
-        console.log(`  CPU: ${nodeGroup.usedCpu}/${nodeGroup.totalCpu} (${nodeGroup.cpuPercentage.toFixed(1)}%)`);
-        console.log(`  Memory: ${nodeGroup.usedMemory}/${nodeGroup.totalMemory} (${nodeGroup.memPercentage.toFixed(1)}%)`);
+        // Return the formatted node group data
+        return {
+          ...nodeGroup,
+          totalCpu: formattedTotalCpu,
+          usedCpu: formattedUsedCpu,
+          totalMemory: totalMemoryDisplay,
+          usedMemory: formatNodeGroupMemory(nodeGroup.usedMemory),
+          cpuPercentage: cpuPercentage,
+          memPercentage: memPercentage
+        };
       } catch (error) {
-        console.error(`Error calculating percentages for nodeGroup ${nodeGroup.name}:`, error);
+        console.error(`Error formatting nodeGroup ${nodeGroup.name}:`, error);
         
-        // Use moderate default percentages if calculation fails
-        nodeGroup.cpuPercentage = 30;
-        nodeGroup.memPercentage = 35;
+        // Fallback to defaults if formatting fails
+        const totalMemory = parseFloat(nodeGroup.totalMemory);
+        const totalMemoryGi = Math.max(1, Math.round(totalMemory / (1024 * 1024 * 1024)));
         
-        // Format the values anyway
-        nodeGroup.totalCpu = formatCpuForDisplay(nodeGroup.totalCpu);
-        nodeGroup.usedCpu = formatCpuForDisplay(nodeGroup.usedCpu);
-        
-        // Use special nodegroup memory formatting
-        nodeGroup.totalMemory = formatNodeGroupMemory(nodeGroup.totalMemory);
-        nodeGroup.usedMemory = formatNodeGroupMemory(nodeGroup.usedMemory);
+        return {
+          ...nodeGroup,
+          totalCpu: formatCpuForDisplay(nodeGroup.totalCpu),
+          usedCpu: formatCpuForDisplay(nodeGroup.usedCpu),
+          totalMemory: `${totalMemoryGi}Gi`,
+          usedMemory: formatNodeGroupMemory(nodeGroup.usedMemory),
+          cpuPercentage: 0,
+          memPercentage: 0
+        };
       }
     });
     
-    // Convert map to array
-    return Array.from(nodeGroups.values());
+    console.log("=== COMPLETED NODE GROUP CALCULATION ===");
+    formattedNodeGroups.forEach(ng => {
+      console.log(`NodeGroup ${ng.name}: CPU=${ng.usedCpu}/${ng.totalCpu} (${ng.cpuPercentage}%), Memory=${ng.totalMemory} (${ng.memPercentage}%)`);
+    });
     
+    return formattedNodeGroups;
   } catch (error) {
     console.error('Error getting node groups:', error);
     throw error;
@@ -744,7 +771,21 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
     
     // Get pod metrics
     console.log('Fetching pod metrics...');
-    let podMetrics = { items: [] };
+    let podMetrics: { 
+      items?: Array<{ 
+        metadata?: { 
+          name?: string; 
+          namespace?: string 
+        }; 
+        containers?: Array<{ 
+          usage?: { 
+            cpu?: string; 
+            memory?: string 
+          } 
+        }> 
+      }> 
+    } = { items: [] };
+    
     try {
       const metricsResponse = await metricsClient.getPodMetrics();
       podMetrics = metricsResponse.body;
