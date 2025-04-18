@@ -1,4 +1,4 @@
-# KubePeek - Next.js Kubernetes Dashboard
+# KubePeek
 
 <img src="assets/logo.png" alt="KubePeek Logo" width="300"/>
 

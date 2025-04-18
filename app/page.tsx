@@ -11,7 +11,7 @@ export default function Home() {
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ bgcolor: '#1976d2', color: 'white', p: 2, boxShadow: 1 }}>
         <Typography variant="h5" component="h1">
-          KubePeek - Kubernetes Dashboard
+          KubePeek
         </Typography>
       </Box>
       
@@ -27,7 +27,7 @@ export default function Home() {
 
       <Box sx={{ p: 1, bgcolor: '#f5f5f5', borderTop: '1px solid #e0e0e0', textAlign: 'center' }}>
         <Typography variant="body2" color="textSecondary">
-          KubePeek - Local Kubernetes Monitoring
+          KubePeek
         </Typography>
       </Box>
     </Box>
