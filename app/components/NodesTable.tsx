@@ -36,6 +36,57 @@ interface NodeRowProps {
   onNodeSelect: (nodeName: string) => void;
 }
 
+// Helper function to extract numeric value from formatted strings
+const parseNumericValue = (valueStr: string): number => {
+  if (!valueStr) return 0;
+  
+  // Convert to string if it's not already
+  valueStr = String(valueStr);
+  
+  // Try direct parse first
+  const directParse = parseFloat(valueStr);
+  if (!isNaN(directParse) && !/[a-zA-Z]/.test(valueStr)) {
+    return directParse;
+  }
+  
+  // For CPU values with units
+  if (/^[\d.]+m$/.test(valueStr)) {
+    // Convert millicores to cores (e.g., "100m" -> 0.1)
+    return parseFloat(valueStr.replace('m', '')) / 1000;
+  }
+  
+  if (/^[\d.]+n$/.test(valueStr)) {
+    // Convert nanocores to cores (e.g., "100n" -> 0.0000001)
+    return parseFloat(valueStr.replace('n', '')) / 1000000000;
+  }
+  
+  if (/^[\d.]+µ$/.test(valueStr)) {
+    // Convert microcores to cores (e.g., "100µ" -> 0.0001)
+    return parseFloat(valueStr.replace('µ', '')) / 1000000;
+  }
+  
+  // For memory values with units
+  if (/^[\d.]+([KMG]i?B?)$/.test(valueStr)) {
+    const numPart = parseFloat(valueStr.replace(/[^0-9.]/g, ''));
+    
+    if (valueStr.includes('K')) {
+      return numPart * 1024;
+    } else if (valueStr.includes('M')) {
+      return numPart * 1024 * 1024;
+    } else if (valueStr.includes('G')) {
+      return numPart * 1024 * 1024 * 1024;
+    }
+  }
+  
+  // Fallback - just try to get any numbers
+  const numMatches = valueStr.match(/[\d.]+/);
+  if (numMatches) {
+    return parseFloat(numMatches[0]);
+  }
+  
+  return 0;
+};
+
 function NodeRow({ node, onNodeSelect }: NodeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -44,15 +95,37 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
   };
 
   const getCpuUsagePercent = () => {
-    const cpuUsage = parseFloat(node.usage.cpu);
-    const cpuCapacity = parseFloat(node.capacity.cpu);
-    return (cpuUsage / cpuCapacity) * 100;
+    try {
+      // Always use parseNumericValue to handle formatted strings consistently
+      const usageValue = parseNumericValue(node.usage.cpu);
+      const capacityValue = parseNumericValue(node.capacity.cpu);
+      
+      if (capacityValue <= 0) return 0;
+      const percent = (usageValue / capacityValue) * 100;
+      
+      // Cap at 100% for display purposes
+      return Math.min(percent, 100);
+    } catch (error) {
+      console.error('Error calculating CPU usage percent:', error);
+      return 0;
+    }
   };
 
   const getMemoryUsagePercent = () => {
-    const memUsage = parseFloat(node.usage.memory);
-    const memCapacity = parseFloat(node.capacity.memory);
-    return (memUsage / memCapacity) * 100;
+    try {
+      // Always use parseNumericValue to handle formatted strings consistently
+      const usageValue = parseNumericValue(node.usage.memory);
+      const capacityValue = parseNumericValue(node.capacity.memory);
+      
+      if (capacityValue <= 0) return 0;
+      const percent = (usageValue / capacityValue) * 100;
+      
+      // Cap at 100% for display purposes
+      return Math.min(percent, 100);
+    } catch (error) {
+      console.error('Error calculating memory usage percent:', error);
+      return 0;
+    }
   };
 
   const cpuUsagePercent = getCpuUsagePercent();
@@ -154,15 +227,37 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
   };
 
   const getCpuUsagePercent = () => {
-    const usedCpu = parseFloat(nodeGroup.usedCpu);
-    const totalCpu = parseFloat(nodeGroup.totalCpu);
-    return (usedCpu / totalCpu) * 100;
+    try {
+      // Always use parseNumericValue to handle formatted strings consistently
+      const usageValue = parseNumericValue(nodeGroup.usedCpu);
+      const totalValue = parseNumericValue(nodeGroup.totalCpu);
+      
+      if (totalValue <= 0) return 0;
+      const percent = (usageValue / totalValue) * 100;
+      
+      // Cap at 100% for display purposes
+      return Math.min(percent, 100);
+    } catch (error) {
+      console.error('Error calculating CPU usage percent:', error);
+      return 0;
+    }
   };
 
   const getMemoryUsagePercent = () => {
-    const usedMemory = parseFloat(nodeGroup.usedMemory);
-    const totalMemory = parseFloat(nodeGroup.totalMemory);
-    return (usedMemory / totalMemory) * 100;
+    try {
+      // Always use parseNumericValue to handle formatted strings consistently
+      const usageValue = parseNumericValue(nodeGroup.usedMemory);
+      const totalValue = parseNumericValue(nodeGroup.totalMemory);
+      
+      if (totalValue <= 0) return 0;
+      const percent = (usageValue / totalValue) * 100;
+      
+      // Cap at 100% for display purposes
+      return Math.min(percent, 100);
+    } catch (error) {
+      console.error('Error calculating memory usage percent:', error);
+      return 0;
+    }
   };
 
   const cpuUsagePercent = getCpuUsagePercent();

@@ -7,6 +7,109 @@ import * as http from 'http';
 import * as url from 'url';
 import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
 
+// Helper function to parse CPU values from Kubernetes format
+const parseCpuValue = (cpuStr: string): string => {
+  if (!cpuStr) return '0';
+  
+  // Remove any quotes
+  cpuStr = cpuStr.replace(/"/g, '');
+  
+  // Handle nanocores (e.g., "100n")
+  if (cpuStr.endsWith('n')) {
+    const nanocores = parseInt(cpuStr.slice(0, -1), 10) || 0;
+    return (nanocores / 1000000000).toString(); // Convert to cores
+  }
+  
+  // Handle millicores (e.g., "100m")
+  if (cpuStr.endsWith('m')) {
+    const millicores = parseInt(cpuStr.slice(0, -1), 10) || 0;
+    return (millicores / 1000).toString(); // Convert to cores
+  }
+  
+  // Handle microcores (e.g., "100µ")
+  if (cpuStr.endsWith('µ')) {
+    const microcores = parseInt(cpuStr.slice(0, -1), 10) || 0;
+    return (microcores / 1000000).toString(); // Convert to cores
+  }
+  
+  // If it's just a number, assume it's cores
+  // First try to parse it as a float
+  try {
+    const cores = parseFloat(cpuStr);
+    if (!isNaN(cores)) {
+      return cores.toString();
+    }
+  } catch (e) {
+    // If parsing fails, fallback to regex
+    const matches = cpuStr.match(/[\d.]+/);
+    if (matches) {
+      return matches[0];
+    }
+  }
+  
+  return '0';
+};
+
+// Helper function to parse memory values from Kubernetes format
+const parseMemoryValue = (memStr: string): string => {
+  if (!memStr) return '0';
+  
+  // Remove any quotes
+  memStr = memStr.replace(/"/g, '');
+  
+  // Handle Ki (kibibytes)
+  if (memStr.endsWith('Ki')) {
+    const kibibytes = parseInt(memStr.slice(0, -2), 10) || 0;
+    return (kibibytes * 1024).toString(); // Convert to bytes
+  }
+  
+  // Handle Mi (mebibytes)
+  if (memStr.endsWith('Mi')) {
+    const mebibytes = parseInt(memStr.slice(0, -2), 10) || 0;
+    return (mebibytes * 1024 * 1024).toString(); // Convert to bytes
+  }
+  
+  // Handle Gi (gibibytes)
+  if (memStr.endsWith('Gi')) {
+    const gibibytes = parseInt(memStr.slice(0, -2), 10) || 0;
+    return (gibibytes * 1024 * 1024 * 1024).toString(); // Convert to bytes
+  }
+  
+  // If it's just a number, assume it's bytes
+  const bytes = parseInt(memStr, 10) || 0;
+  return bytes.toString();
+};
+
+// Format CPU for display
+const formatCpuForDisplay = (cpuStr: string): string => {
+  const cpu = parseFloat(cpuStr);
+  if (isNaN(cpu) || cpu === 0) return '0';
+  
+  if (cpu < 0.001) {
+    return `${(cpu * 1000000).toFixed(0)}µ`; // Microcores
+  } else if (cpu < 1) {
+    return `${(cpu * 1000).toFixed(0)}m`; // Millicores
+  } else {
+    return cpu % 1 === 0 ? cpu.toFixed(0) : cpu.toFixed(2); // Cores
+  }
+};
+
+// Format memory for display
+const formatMemoryForDisplay = (memStr: string): string => {
+  const mem = parseFloat(memStr);
+  if (isNaN(mem) || mem === 0) return '0';
+  
+  if (mem < 1024) {
+    return `${mem.toFixed(0)}B`;
+  } else if (mem < 1024 * 1024) {
+    return `${(mem / 1024).toFixed(0)}KB`;
+  } else if (mem < 1024 * 1024 * 1024) {
+    return `${(mem / (1024 * 1024)).toFixed(0)}MB`;
+  } else {
+    return `${(mem / (1024 * 1024 * 1024)).toFixed(0)}GB`;
+  }
+};
+
 // Use Node.js native https module to make requests without certificate validation
 const fetchWithoutCertValidation = async (urlString: string, options: any = {}): Promise<any> => {
   return new Promise((resolve, reject) => {
@@ -305,8 +408,14 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
         const memoryAllocatable = node.status?.allocatable?.['memory'] || '0';
         
         // Get CPU and memory usage from metrics
-        const cpuUsage = metrics?.usage?.cpu || '0';
-        const memoryUsage = metrics?.usage?.memory || '0';
+        let cpuUsage = metrics?.usage?.cpu || '0';
+        let memoryUsage = metrics?.usage?.memory || '0';
+        
+        // Parse CPU usage from Kubernetes format (convert to cores)
+        cpuUsage = parseCpuValue(cpuUsage);
+        
+        // Parse memory usage from Kubernetes format
+        memoryUsage = parseMemoryValue(memoryUsage);
         
         // Parse instance type from labels
         const instanceType = node.metadata?.labels?.['node.kubernetes.io/instance-type'] ||
@@ -330,16 +439,16 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
           instanceType,
           tags,
           capacity: {
-            cpu: cpuCapacity,
-            memory: memoryCapacity
+            cpu: formatCpuForDisplay(cpuCapacity),
+            memory: formatMemoryForDisplay(memoryCapacity)
           },
           allocatable: {
-            cpu: cpuAllocatable,
-            memory: memoryAllocatable
+            cpu: formatCpuForDisplay(cpuAllocatable),
+            memory: formatMemoryForDisplay(memoryAllocatable)
           },
           usage: {
-            cpu: cpuUsage,
-            memory: memoryUsage
+            cpu: formatCpuForDisplay(cpuUsage),
+            memory: formatMemoryForDisplay(memoryUsage)
           },
           pods: nodePods.length
         };
@@ -414,12 +523,29 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
       // Add node to group
       nodeGroup.nodes.push(node);
       
-      // Update group metrics
-      nodeGroup.totalCpu = (parseFloat(nodeGroup.totalCpu) + parseFloat(node.capacity.cpu)).toString();
-      nodeGroup.totalMemory = (parseFloat(nodeGroup.totalMemory) + parseFloat(node.capacity.memory)).toString();
-      nodeGroup.usedCpu = (parseFloat(nodeGroup.usedCpu) + parseFloat(node.usage.cpu)).toString();
-      nodeGroup.usedMemory = (parseFloat(nodeGroup.usedMemory) + parseFloat(node.usage.memory)).toString();
+      // Parse raw values for clean calculation
+      const nodeCpuCapacity = parseFloat(parseCpuValue(node.capacity.cpu));
+      const nodeCpuUsage = parseFloat(parseCpuValue(node.usage.cpu));
+      const nodeMemCapacity = parseFloat(parseMemoryValue(node.capacity.memory));
+      const nodeMemUsage = parseFloat(parseMemoryValue(node.usage.memory));
+      
+      // Update group metrics with parsed values
+      nodeGroup.totalCpu = (parseFloat(nodeGroup.totalCpu) + nodeCpuCapacity).toString();
+      nodeGroup.totalMemory = (parseFloat(nodeGroup.totalMemory) + nodeMemCapacity).toString();
+      nodeGroup.usedCpu = (parseFloat(nodeGroup.usedCpu) + nodeCpuUsage).toString();
+      nodeGroup.usedMemory = (parseFloat(nodeGroup.usedMemory) + nodeMemUsage).toString();
       nodeGroup.podsCount += node.pods;
+    });
+    
+    // Format values for display
+    nodeGroups.forEach(nodeGroup => {
+      // Format CPU values
+      nodeGroup.totalCpu = formatCpuForDisplay(nodeGroup.totalCpu);
+      nodeGroup.usedCpu = formatCpuForDisplay(nodeGroup.usedCpu);
+      
+      // Format memory values
+      nodeGroup.totalMemory = formatMemoryForDisplay(nodeGroup.totalMemory);
+      nodeGroup.usedMemory = formatMemoryForDisplay(nodeGroup.usedMemory);
     });
     
     // Convert map to array
@@ -472,16 +598,14 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
         if (metrics?.containers) {
           metrics.containers.forEach(container => {
             try {
-              // Parse CPU usage (remove the 'n' suffix if present)
-              const cpuUsage = container.usage?.cpu || '0';
-              const cpuValueStr = cpuUsage.toString().replace(/n$/, '');
-              const cpuValue = parseInt(cpuValueStr) || 0;
+              // Parse CPU usage
+              const cpuUsageStr = container.usage?.cpu || '0';
+              const cpuValue = parseFloat(parseCpuValue(cpuUsageStr));
               totalCpuUsage += cpuValue;
               
-              // Parse memory usage (remove the 'Ki' suffix if present)
-              const memoryUsage = container.usage?.memory || '0';
-              const memoryValueStr = memoryUsage.toString().replace(/Ki$/, '');
-              const memoryValue = parseInt(memoryValueStr) || 0;
+              // Parse memory usage
+              const memoryUsageStr = container.usage?.memory || '0';
+              const memoryValue = parseFloat(parseMemoryValue(memoryUsageStr));
               totalMemoryUsage += memoryValue;
             } catch (parseError) {
               console.error(`Error parsing container metrics for ${pod.metadata?.name}:`, parseError);
@@ -489,9 +613,9 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
           });
         }
         
-        // Format CPU and memory usage
-        const cpuUsageFormatted = `${((totalCpuUsage || 0) / 1000000).toFixed(2)}m`;
-        const memoryUsageFormatted = `${((totalMemoryUsage || 0) / 1024).toFixed(2)}Mi`;
+        // Format CPU and memory usage for display
+        const cpuUsageFormatted = formatCpuForDisplay(totalCpuUsage.toString());
+        const memoryUsageFormatted = formatMemoryForDisplay(totalMemoryUsage.toString());
         
         // Extract Helm information from labels
         const labels = pod.metadata?.labels || {};
