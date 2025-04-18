@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-  Paper, Chip, TextField, InputAdornment, TableSortLabel, Box, Tooltip
+  Paper, Chip, TextField, InputAdornment, TableSortLabel, Box, Tooltip,
+  FormControl, Select, MenuItem, InputLabel, Grid
 } from '@mui/material';
 import { 
   Search as SearchIcon,
@@ -42,6 +43,13 @@ export default function PodsTable({ pods }: PodsTableProps) {
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<keyof Pod>('name');
   const [searchQuery, setSearchQuery] = useState('');
+  const [namespaceFilter, setNamespaceFilter] = useState<string>('all');
+
+  // Extract unique namespaces for the filter dropdown
+  const namespaces = useMemo(() => {
+    const uniqueNamespaces = new Set(pods.map(pod => pod.namespace));
+    return ['all', ...Array.from(uniqueNamespaces)].sort();
+  }, [pods]);
 
   const handleRequestSort = (property: keyof Pod) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -64,8 +72,14 @@ export default function PodsTable({ pods }: PodsTableProps) {
     }
   };
 
-  // Filter pods based on search query
+  // Filter pods based on search query and namespace
   const filteredPods = pods.filter(pod => {
+    // Filter by namespace first
+    if (namespaceFilter !== 'all' && pod.namespace !== namespaceFilter) {
+      return false;
+    }
+    
+    // Then filter by search query
     if (!searchQuery) return true;
     
     const query = searchQuery.toLowerCase();
@@ -111,23 +125,43 @@ export default function PodsTable({ pods }: PodsTableProps) {
 
   return (
     <>
-      <Box sx={{ mb: 2 }}>
-        <TextField
-          fullWidth
-          variant="outlined"
-          size="small"
-          placeholder="Search pods..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Box>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={8}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            size="small"
+            placeholder="Search pods..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Grid>
+        <Grid item xs={4}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="namespace-filter-label">Namespace</InputLabel>
+            <Select
+              labelId="namespace-filter-label"
+              id="namespace-filter"
+              value={namespaceFilter}
+              label="Namespace"
+              onChange={(e) => setNamespaceFilter(e.target.value)}
+            >
+              {namespaces.map((namespace) => (
+                <MenuItem key={namespace} value={namespace}>
+                  {namespace === 'all' ? 'All Namespaces' : namespace}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+      </Grid>
 
       <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
         <Table stickyHeader aria-label="pods table">
