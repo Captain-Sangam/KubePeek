@@ -15,7 +15,6 @@ import {
 } from '@mui/icons-material';
 import { Pod, Cluster } from '../types/kubernetes';
 import { useTheme } from '../lib/ThemeProvider';
-import PodDetailPanel from './PodDetailPanel';
 
 type Order = 'asc' | 'desc';
 
@@ -60,12 +59,7 @@ export default function PodsTable({ pods, cluster }: PodsTableProps) {
   const [orderBy, setOrderBy] = useState<keyof Pod>('name');
   const [searchQuery, setSearchQuery] = useState('');
   const [namespaceFilter, setNamespaceFilter] = useState<string>('all');
-  const [selectedPod, setSelectedPod] = useState<Pod | null>(null);
-  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
-  const [showLogsDialog, setShowLogsDialog] = useState(false);
-  const [logsContent, setLogsContent] = useState<string | null>(null);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
   const { mode } = useTheme();
 
   // Extract unique namespaces for the filter dropdown
@@ -145,63 +139,6 @@ export default function PodsTable({ pods, cluster }: PodsTableProps) {
       return aValue.localeCompare(bValue);
     }
   });
-
-  const handlePodClick = (pod: Pod) => {
-    setSelectedPod(pod);
-    setDetailPanelOpen(true);
-  };
-
-  const handleCloseDetailPanel = () => {
-    setDetailPanelOpen(false);
-  };
-
-  const handleDeletePod = async (pod: Pod) => {
-    try {
-      const response = await fetch(
-        `/api/clusters/${cluster.name}/pods/${pod.namespace}/${pod.name}/delete`, 
-        { method: 'DELETE' }
-      );
-      const data = await response.json();
-      
-      if (data.success) {
-        // Close the detail panel and handle success
-        setDetailPanelOpen(false);
-        // You might want to refresh the pods list here
-        console.log(`Pod ${pod.namespace}/${pod.name} deleted successfully`);
-      } else {
-        console.error(`Failed to delete pod: ${data.message}`);
-      }
-    } catch (error) {
-      console.error('Error deleting pod:', error);
-    }
-  };
-
-  const handleViewLogs = async (pod: Pod) => {
-    setLogsLoading(true);
-    
-    try {
-      const response = await fetch(`/api/clusters/${cluster.name}/pods/${pod.namespace}/${pod.name}/logs`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setLogsContent(data.logs || 'No logs available');
-      } else {
-        setLogsContent(`Error: ${data.message || 'Failed to fetch logs'}`);
-      }
-    } catch (error) {
-      setLogsContent('Error: Failed to fetch logs');
-      console.error('Error fetching pod logs:', error);
-    } finally {
-      setLogsLoading(false);
-    }
-  };
-
-  const handleOpenShell = (pod: Pod) => {
-    // Since we can't actually open a shell in the browser easily,
-    // we'll just show the kubectl command to use
-    alert(`To shell into this pod, run the following command:
-kubectl exec -it ${pod.name} -n ${pod.namespace} -- /bin/sh`);
-  };
 
   return (
     <>
@@ -351,13 +288,7 @@ kubectl exec -it ${pod.name} -n ${pod.namespace} -- /bin/sh`);
               <TableRow 
                 key={`${pod.namespace}-${pod.name}`}
                 hover
-                onClick={() => handlePodClick(pod)}
-                sx={{ 
-                  '&:hover': { 
-                    backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.04)'
-                  },
-                  cursor: 'pointer'
-                }}
+                sx={{ cursor: 'default' }}
               >
                 <TableCell 
                   sx={{ 
@@ -516,16 +447,6 @@ kubectl exec -it ${pod.name} -n ${pod.namespace} -- /bin/sh`);
           </TableBody>
         </Table>
       </TableContainer>
-      
-      <PodDetailPanel
-        pod={selectedPod}
-        cluster={cluster}
-        open={detailPanelOpen}
-        onClose={handleCloseDetailPanel}
-        onDeletePod={handleDeletePod}
-        onViewLogs={handleViewLogs}
-        onOpenShell={handleOpenShell}
-      />
     </>
   );
 } 

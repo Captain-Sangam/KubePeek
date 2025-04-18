@@ -812,19 +812,52 @@ export const getPodLogs = async (
   containerName?: string,
   tailLines?: number
 ): Promise<{ success: boolean; logs?: string; message?: string }> => {
+  console.log(`kubernetes-server: Getting logs for pod ${namespace}/${podName} in cluster ${clusterName}`, 
+    { containerName, tailLines });
+  
   try {
+    if (!clusterName || !namespace || !podName) {
+      console.error('Missing required parameters:', { clusterName, namespace, podName });
+      return { 
+        success: false, 
+        message: `Missing required parameters: ${!clusterName ? 'cluster' : ''} ${!namespace ? 'namespace' : ''} ${!podName ? 'podName' : ''}`.trim()
+      };
+    }
+    
     const { coreClient } = getClientForCluster(clusterName);
     
     // If container name is not provided, get all container logs
     if (!containerName) {
       // First get the pod to find all containers
-      const { body: pod } = await coreClient.readNamespacedPod(podName, namespace);
+      console.log(`kubernetes-server: Fetching pod ${namespace}/${podName} to get container names`);
+      let pod;
+      try {
+        const response = await coreClient.readNamespacedPod(podName, namespace);
+        pod = response.body;
+      } catch (podError) {
+        console.error(`Error fetching pod ${namespace}/${podName}:`, podError);
+        
+        if (podError.response && podError.response.statusCode === 404) {
+          return { 
+            success: false, 
+            message: `Pod ${namespace}/${podName} not found` 
+          };
+        }
+        throw podError;
+      }
+      
       const containerNames = pod.spec?.containers.map(c => c.name) || [];
+      console.log(`kubernetes-server: Found ${containerNames.length} containers in pod ${namespace}/${podName}`);
+      
+      if (containerNames.length === 0) {
+        return { success: true, logs: 'No containers found in pod' };
+      }
       
       // Get logs for each container
       let allLogs = '';
       for (const container of containerNames) {
         try {
+          console.log(`kubernetes-server: Fetching logs for container ${container}`);
           const { body } = await coreClient.readNamespacedPodLog(
             podName, 
             namespace, 
@@ -835,6 +868,7 @@ export const getPodLogs = async (
           );
           allLogs += `\n--- Container: ${container} ---\n${body}\n`;
         } catch (containerError) {
+          console.error(`Error fetching logs for container ${container}:`, containerError);
           allLogs += `\n--- Container: ${container} ---\nError fetching logs: ${
             containerError instanceof Error ? containerError.message : 'Unknown error'
           }\n`;
@@ -844,6 +878,7 @@ export const getPodLogs = async (
     }
     
     // Get logs for a specific container
+    console.log(`kubernetes-server: Fetching logs for specific container ${containerName}`);
     const { body } = await coreClient.readNamespacedPodLog(
       podName, 
       namespace, 
@@ -856,9 +891,26 @@ export const getPodLogs = async (
     return { success: true, logs: body };
   } catch (error) {
     console.error(`Error getting logs for pod ${namespace}/${podName}:`, error);
+    let errorMessage = 'Unknown error occurred while fetching logs';
+    
+    // Handle specific kubernetes client errors
+    if (error.response && error.response.statusCode) {
+      const statusCode = error.response.statusCode;
+      
+      if (statusCode === 404) {
+        errorMessage = `Pod ${namespace}/${podName} not found`;
+      } else if (statusCode === 403) {
+        errorMessage = `Access denied for pod logs ${namespace}/${podName}`;
+      } else {
+        errorMessage = `Kubernetes API error (${statusCode}): ${error.response.body?.message || 'Unknown error'}`;
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
     return { 
       success: false, 
-      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching logs' 
+      message: errorMessage
     };
   }
 };
@@ -869,16 +921,203 @@ export const getPodDetails = async (
   namespace: string, 
   podName: string
 ): Promise<{ success: boolean; details?: any; message?: string }> => {
+  console.log(`kubernetes-server: Getting details for pod ${namespace}/${podName} in cluster ${clusterName}`);
+  
   try {
+    if (!clusterName || !namespace || !podName) {
+      console.error('Missing required parameters:', { clusterName, namespace, podName });
+      return { 
+        success: false, 
+        message: `Missing required parameters: ${!clusterName ? 'cluster' : ''} ${!namespace ? 'namespace' : ''} ${!podName ? 'podName' : ''}`.trim()
+      };
+    }
+    
     const { coreClient } = getClientForCluster(clusterName);
+    
+    console.log(`kubernetes-server: Calling readNamespacedPod for ${namespace}/${podName}`);
     const { body: pod } = await coreClient.readNamespacedPod(podName, namespace);
+    console.log(`kubernetes-server: Successfully fetched pod details for ${namespace}/${podName}`);
     
     return { success: true, details: pod };
   } catch (error) {
     console.error(`Error getting details for pod ${namespace}/${podName}:`, error);
+    let errorMessage = 'Unknown error occurred while fetching pod details';
+    let statusCode;
+    
+    // Handle specific kubernetes client errors
+    if (error.response && error.response.statusCode) {
+      statusCode = error.response.statusCode;
+      
+      if (statusCode === 404) {
+        errorMessage = `Pod ${namespace}/${podName} not found`;
+      } else if (statusCode === 403) {
+        errorMessage = `Access denied for pod ${namespace}/${podName}`;
+      } else {
+        errorMessage = `Kubernetes API error (${statusCode}): ${error.response.body?.message || 'Unknown error'}`;
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
     return { 
       success: false, 
-      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching pod details' 
+      message: errorMessage
     };
   }
-}; 
+};
+
+// Get pod details using kubectl command (fallback method)
+export const getPodDetailsUsingKubectl = async (
+  clusterName: string, 
+  namespace: string, 
+  podName: string
+): Promise<{ success: boolean; details?: any; message?: string }> => {
+  try {
+    // Set kubectl context to the specified cluster
+    const kc = loadKubeConfig();
+    try {
+      kc.setCurrentContext(clusterName);
+    } catch (error) {
+      console.error(`Failed to set context to ${clusterName}:`, error);
+      // Continue with the current context as a fallback
+    }
+
+    // Use child_process to run the kubectl command
+    const { exec } = require('child_process');
+    
+    return new Promise((resolve) => {
+      exec(`kubectl describe pod ${podName} -n ${namespace}`, (error: any, stdout: string, stderr: string) => {
+        if (error) {
+          console.error(`Error executing kubectl describe pod: ${error.message}`);
+          resolve({ 
+            success: false, 
+            message: `Failed to get pod details using kubectl: ${error.message}`
+          });
+          return;
+        }
+        
+        if (stderr) {
+          console.error(`kubectl stderr: ${stderr}`);
+          resolve({ 
+            success: false, 
+            message: `kubectl error: ${stderr}`
+          });
+          return;
+        }
+        
+        // Parse the kubectl output into a structured format
+        const details = parseKubectlDescribeOutput(stdout);
+        
+        resolve({ 
+          success: true, 
+          details,
+          rawOutput: stdout // Include the raw output for display
+        });
+      });
+    });
+  } catch (error) {
+    console.error(`Error getting pod details for ${namespace}/${podName} using kubectl:`, error);
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching pod details'
+    };
+  }
+};
+
+// Helper function to parse kubectl describe pod output
+function parseKubectlDescribeOutput(output: string): any {
+  const details: any = {
+    metadata: {
+      name: '',
+      namespace: '',
+      labels: {},
+      annotations: {}
+    },
+    spec: {
+      containers: []
+    },
+    status: {
+      phase: '',
+      containerStatuses: []
+    },
+    rawOutput: output
+  };
+  
+  // Extract basic metadata
+  const nameMatch = output.match(/Name:\s+(.+)$/m);
+  if (nameMatch) details.metadata.name = nameMatch[1].trim();
+  
+  const namespaceMatch = output.match(/Namespace:\s+(.+)$/m);
+  if (namespaceMatch) details.metadata.namespace = namespaceMatch[1].trim();
+  
+  const statusMatch = output.match(/Status:\s+(.+)$/m);
+  if (statusMatch) details.status.phase = statusMatch[1].trim();
+  
+  // Extract labels
+  const labelsSection = output.match(/Labels:\s+([\s\S]+?)(?=Annotations:|Status:|$)/m);
+  if (labelsSection) {
+    const labelLines = labelsSection[1].trim().split('\n');
+    labelLines.forEach(line => {
+      const [key, value] = line.trim().split('=');
+      if (key && value) {
+        details.metadata.labels[key.trim()] = value.trim();
+      }
+    });
+  }
+  
+  // Extract annotations
+  const annotationsSection = output.match(/Annotations:\s+([\s\S]+?)(?=Status:|$)/m);
+  if (annotationsSection) {
+    const annotationLines = annotationsSection[1].trim().split('\n');
+    annotationLines.forEach(line => {
+      const parts = line.trim().split(':');
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        const value = parts.slice(1).join(':').trim();
+        details.metadata.annotations[key] = value;
+      }
+    });
+  }
+  
+  // Extract container info
+  const containerSections = output.match(/Containers:([\s\S]+?)(?=Conditions:|Events:|$)/);
+  if (containerSections) {
+    const containersList = containerSections[1].split(/Container ID:/g);
+    
+    // Skip the first empty item if it exists
+    for (let i = 1; i < containersList.length; i++) {
+      const containerInfo = containersList[i];
+      const container: any = {
+        name: '',
+        state: 'unknown',
+        ready: false,
+        restartCount: 0,
+        image: ''
+      };
+      
+      // Extract container name
+      const nameMatch = containerInfo.match(/^.*?\n\s+Name:\s+(.+)$/m);
+      if (nameMatch) container.name = nameMatch[1].trim();
+      
+      // Extract container image
+      const imageMatch = containerInfo.match(/Image:\s+(.+)$/m);
+      if (imageMatch) container.image = imageMatch[1].trim();
+      
+      // Extract container state
+      const stateMatch = containerInfo.match(/State:\s+(.+)$/m);
+      if (stateMatch) container.state = stateMatch[1].trim();
+      
+      // Extract ready state
+      const readyMatch = containerInfo.match(/Ready:\s+(.+)$/m);
+      if (readyMatch) container.ready = readyMatch[1].trim() === 'true';
+      
+      // Extract restart count
+      const restartMatch = containerInfo.match(/Restart Count:\s+(\d+)$/m);
+      if (restartMatch) container.restartCount = parseInt(restartMatch[1].trim(), 10);
+      
+      details.status.containerStatuses.push(container);
+    }
+  }
+  
+  return details;
+} 
