@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
@@ -40,9 +40,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const newMode = mode === 'light' ? 'dark' : 'light';
     setMode(newMode);
     localStorage.setItem('themeMode', newMode);
+    
+    // Force update document body attributes
+    document.body.dataset.theme = newMode;
+    
+    // Force a re-render of all component styles by applying a theme class
+    if (newMode === 'dark') {
+      document.documentElement.classList.add('dark-theme');
+      document.documentElement.classList.remove('light-theme');
+    } else {
+      document.documentElement.classList.add('light-theme');
+      document.documentElement.classList.remove('dark-theme');
+    }
   };
 
-  const theme = createTheme({
+  // Create a memoized theme object that only updates when mode changes
+  const theme = useMemo(() => createTheme({
     palette: {
       mode,
       primary: {
@@ -118,7 +131,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         },
       },
     },
-  });
+  }), [mode]);
+
+  // Set initial theme class and data attribute on first render
+  useEffect(() => {
+    document.body.dataset.theme = mode;
+    if (mode === 'dark') {
+      document.documentElement.classList.add('dark-theme');
+      document.documentElement.classList.remove('light-theme');
+    } else {
+      document.documentElement.classList.add('light-theme');
+      document.documentElement.classList.remove('dark-theme');
+    }
+  }, [mode]);
 
   return (
     <ThemeContext.Provider value={{ mode, toggleTheme }}>
