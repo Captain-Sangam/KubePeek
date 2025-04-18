@@ -43,4 +43,6 @@ export interface NodeGroupInfo {
   usedCpu: string;
   usedMemory: string;
   podsCount: number;
+  cpuPercentage?: number;
+  memPercentage?: number;
 } 

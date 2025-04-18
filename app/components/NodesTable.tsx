@@ -65,17 +65,47 @@ const parseNumericValue = (valueStr: string): number => {
     return parseFloat(valueStr.replace('µ', '')) / 1000000;
   }
   
-  // For memory values with units
-  if (/^[\d.]+([KMG]i?B?)$/.test(valueStr)) {
-    const numPart = parseFloat(valueStr.replace(/[^0-9.]/g, ''));
-    
-    if (valueStr.includes('K')) {
-      return numPart * 1024;
-    } else if (valueStr.includes('M')) {
-      return numPart * 1024 * 1024;
-    } else if (valueStr.includes('G')) {
-      return numPart * 1024 * 1024 * 1024;
-    }
+  // For memory values with units - MODIFIED TO MATCH kubernetes.ts
+  
+  // Ki (kibibytes)
+  if (/^[\d.]+Ki$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('Ki', '')) * 1024; // To bytes
+  }
+  
+  // Mi (mebibytes)
+  if (/^[\d.]+Mi$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('Mi', '')) * 1024 * 1024; // To bytes
+  }
+  
+  // Gi (gibibytes)
+  if (/^[\d.]+Gi$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('Gi', '')) * 1024 * 1024 * 1024; // To bytes
+  }
+  
+  // K, M, G (without i)
+  if (/^[\d.]+K$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('K', '')) * 1000; // To bytes
+  }
+  
+  if (/^[\d.]+M$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('M', '')) * 1000 * 1000; // To bytes
+  }
+  
+  if (/^[\d.]+G$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('G', '')) * 1000 * 1000 * 1000; // To bytes
+  }
+  
+  // KB, MB, GB
+  if (/^[\d.]+KB$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('KB', '')) * 1000; // To bytes
+  }
+  
+  if (/^[\d.]+MB$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('MB', '')) * 1000 * 1000; // To bytes
+  }
+  
+  if (/^[\d.]+GB$/.test(valueStr)) {
+    return parseFloat(valueStr.replace('GB', '')) * 1000 * 1000 * 1000; // To bytes
   }
   
   // Fallback - just try to get any numbers
@@ -228,9 +258,17 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
 
   const getCpuUsagePercent = () => {
     try {
-      // Always use parseNumericValue to handle formatted strings consistently
+      // Use pre-calculated percentage if available
+      if (nodeGroup.cpuPercentage !== undefined) {
+        return nodeGroup.cpuPercentage;
+      }
+      
+      // Otherwise use the old calculation
       const usageValue = parseNumericValue(nodeGroup.usedCpu);
       const totalValue = parseNumericValue(nodeGroup.totalCpu);
+      
+      // Debug log to see the values
+      console.log(`NodeGroup ${nodeGroup.name} CPU: used=${nodeGroup.usedCpu} (${usageValue}), total=${nodeGroup.totalCpu} (${totalValue})`);
       
       if (totalValue <= 0) return 0;
       const percent = (usageValue / totalValue) * 100;
@@ -245,9 +283,17 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
 
   const getMemoryUsagePercent = () => {
     try {
-      // Always use parseNumericValue to handle formatted strings consistently
+      // Use pre-calculated percentage if available
+      if (nodeGroup.memPercentage !== undefined) {
+        return nodeGroup.memPercentage;
+      }
+      
+      // Otherwise use the old calculation
       const usageValue = parseNumericValue(nodeGroup.usedMemory);
       const totalValue = parseNumericValue(nodeGroup.totalMemory);
+      
+      // Debug log to see the values
+      console.log(`NodeGroup ${nodeGroup.name} memory: used=${nodeGroup.usedMemory} (${usageValue}), total=${nodeGroup.totalMemory} (${totalValue})`);
       
       if (totalValue <= 0) return 0;
       const percent = (usageValue / totalValue) * 100;
