@@ -180,15 +180,28 @@ const formatMemoryForDisplay = (memStr: string): string => {
   const mem = parseFloat(memStr);
   if (isNaN(mem) || mem === 0) return '0';
   
-  if (mem < 1024) {
+  // For nodegroups, we want to display memory in Gi for better readability
+  // Each node in a nodegroup typically has several Gi of memory
+  const gigabytes = mem / (1024 * 1024 * 1024);
+  if (gigabytes >= 1) {
+    return `${gigabytes.toFixed(0)}Gi`;
+  } else if (mem < 1024) {
     return `${mem.toFixed(0)}B`;
   } else if (mem < 1024 * 1024) {
-    return `${(mem / 1024).toFixed(0)}KB`;
-  } else if (mem < 1024 * 1024 * 1024) {
-    return `${(mem / (1024 * 1024)).toFixed(0)}MB`;
+    return `${(mem / 1024).toFixed(0)}Ki`;
   } else {
-    return `${(mem / (1024 * 1024 * 1024)).toFixed(0)}GB`;
+    return `${(mem / (1024 * 1024)).toFixed(0)}Mi`;
   }
+};
+
+// Format memory for nodegroups (always in Gi)
+const formatNodeGroupMemory = (memStr: string): string => {
+  const mem = parseFloat(memStr);
+  if (isNaN(mem) || mem === 0) return '0Gi';
+  
+  // Always convert to Gi for nodegroups
+  const gigabytes = mem / (1024 * 1024 * 1024);
+  return `${gigabytes.toFixed(0)}Gi`;
 };
 
 // Use Node.js native https module to make requests without certificate validation
@@ -671,11 +684,9 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
           cpuPercent = (rawCpuUsed / rawCpuTotal) * 100;
         }
         
-        // CRITICAL FIX: For memory, we know the values are currently reporting too high
-        // Set an artificial cap that produces reasonable-looking values
-        // This is a temporary workaround until we can fix the underlying data
-        nodeGroup.memPercentage = Math.min(20 + Math.random() * 15, 50); // Random value between 20-35%
-        nodeGroup.cpuPercentage = Math.min(cpuPercent, 95);
+        // Use the actual calculated percentages rather than random values
+        nodeGroup.memPercentage = Math.min(memPercent, 100);
+        nodeGroup.cpuPercentage = Math.min(cpuPercent, 100);
         
         // Log the calculations for debugging
         console.log(`NodeGroup ${nodeGroup.name} percentages calculation:`);
@@ -685,8 +696,10 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         // Format CPU and memory values for display
         nodeGroup.totalCpu = formatCpuForDisplay(nodeGroup.totalCpu);
         nodeGroup.usedCpu = formatCpuForDisplay(nodeGroup.usedCpu);
-        nodeGroup.totalMemory = formatMemoryForDisplay(nodeGroup.totalMemory);
-        nodeGroup.usedMemory = formatMemoryForDisplay(nodeGroup.usedMemory);
+        
+        // Use special nodegroup memory formatting
+        nodeGroup.totalMemory = formatNodeGroupMemory(nodeGroup.totalMemory);
+        nodeGroup.usedMemory = formatNodeGroupMemory(nodeGroup.usedMemory);
         
         console.log(`NodeGroup ${nodeGroup.name} final display values:`);
         console.log(`  CPU: ${nodeGroup.usedCpu}/${nodeGroup.totalCpu} (${nodeGroup.cpuPercentage.toFixed(1)}%)`);
@@ -701,8 +714,10 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         // Format the values anyway
         nodeGroup.totalCpu = formatCpuForDisplay(nodeGroup.totalCpu);
         nodeGroup.usedCpu = formatCpuForDisplay(nodeGroup.usedCpu);
-        nodeGroup.totalMemory = formatMemoryForDisplay(nodeGroup.totalMemory);
-        nodeGroup.usedMemory = formatMemoryForDisplay(nodeGroup.usedMemory);
+        
+        // Use special nodegroup memory formatting
+        nodeGroup.totalMemory = formatNodeGroupMemory(nodeGroup.totalMemory);
+        nodeGroup.usedMemory = formatNodeGroupMemory(nodeGroup.usedMemory);
       }
     });
     
