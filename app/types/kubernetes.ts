@@ -2,6 +2,7 @@ export interface Cluster {
   name: string;
   context: string;
   server: string;
+  displayName?: string;
 }
 
 export interface Node {

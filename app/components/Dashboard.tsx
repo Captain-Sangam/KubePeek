@@ -5,6 +5,7 @@ import { Box, Grid, Paper, Alert } from '@mui/material';
 import ClusterList from './ClusterList';
 import ClusterDetails from './ClusterDetails';
 import { Cluster } from '../types/kubernetes';
+import { getClusterDisplayNames } from '../lib/kubernetes-client';
 
 export default function Dashboard() {
   const [clusters, setClusters] = useState<Cluster[]>([]);
@@ -22,11 +23,19 @@ export default function Dashboard() {
         }
         
         const data = await res.json();
-        setClusters(data);
+        
+        // Apply display names from localStorage
+        const displayNames = getClusterDisplayNames();
+        const clustersWithDisplayNames = data.map((cluster: Cluster) => ({
+          ...cluster,
+          displayName: displayNames[cluster.name] || ''
+        }));
+        
+        setClusters(clustersWithDisplayNames);
         
         // Select the first cluster by default if available
-        if (data.length > 0) {
-          setSelectedCluster(data[0]);
+        if (clustersWithDisplayNames.length > 0) {
+          setSelectedCluster(clustersWithDisplayNames[0]);
         }
       } catch (err: any) {
         setError(err.message || 'Failed to fetch clusters');
@@ -52,7 +61,13 @@ export default function Dashboard() {
       
       <Grid container spacing={2} sx={{ height: 'calc(100% - 8px)' }}>
         <Grid item xs={12} md={3} lg={2} sx={{ height: '100%' }}>
-          <Paper sx={{ height: '100%', overflow: 'auto', p: 2 }}>
+          <Paper sx={{ 
+            height: '100%', 
+            overflow: 'hidden', 
+            p: 2,
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
             <ClusterList 
               clusters={clusters} 
               selectedCluster={selectedCluster} 

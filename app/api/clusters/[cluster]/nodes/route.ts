@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getNodes } from '../../../../lib/kubernetes';
+import { getNodes } from '../../../../lib/kubernetes-server';
 
 export async function GET(
   request: NextRequest,

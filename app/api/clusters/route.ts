@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getClusters } from '../../lib/kubernetes';
+import { getClusters } from '../../lib/kubernetes-server';
 
 export async function GET() {
   try {

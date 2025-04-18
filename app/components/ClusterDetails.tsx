@@ -177,10 +177,15 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
   return (
     <Box sx={{ height: '100%' }}>
       <Typography variant="h5" sx={{ mb: 2 }}>
-        {cluster.name}
+        {cluster.displayName || cluster.name}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         {cluster.server}
+        {cluster.displayName && (
+          <Box component="span" sx={{ ml: 1, color: 'text.disabled' }}>
+            (Original name: {cluster.name})
+          </Box>
+        )}
       </Typography>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

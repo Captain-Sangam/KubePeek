@@ -1,3 +1,5 @@
+'use server';
+
 import * as k8s from '@kubernetes/client-node';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,38 +9,6 @@ import * as http from 'http';
 import * as url from 'url';
 import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
 import { Options } from 'request';
-import { getClusterDisplayNames } from './kubernetes-client';
-
-// Store for custom cluster display names
-const CLUSTER_NAMES_STORAGE_KEY = 'kubepeek_cluster_display_names';
-
-// Save custom display name for a cluster
-export const saveClusterDisplayName = (clusterName: string, displayName: string): void => {
-  if (typeof window !== 'undefined') {
-    try {
-      const storedNames = localStorage.getItem(CLUSTER_NAMES_STORAGE_KEY);
-      const clusterNames = storedNames ? JSON.parse(storedNames) : {};
-      clusterNames[clusterName] = displayName;
-      localStorage.setItem(CLUSTER_NAMES_STORAGE_KEY, JSON.stringify(clusterNames));
-    } catch (error) {
-      console.error('Error saving cluster display name:', error);
-    }
-  }
-};
-
-// Get custom display names for all clusters
-export const getClusterDisplayNames = (): Record<string, string> => {
-  if (typeof window !== 'undefined') {
-    try {
-      const storedNames = localStorage.getItem(CLUSTER_NAMES_STORAGE_KEY);
-      return storedNames ? JSON.parse(storedNames) : {};
-    } catch (error) {
-      console.error('Error retrieving cluster display names:', error);
-      return {};
-    }
-  }
-  return {};
-};
 
 // Helper function to parse CPU values from Kubernetes format
 const parseCpuValue = (cpuStr: string): string => {
@@ -92,14 +62,8 @@ const parseMemoryValue = (memStr: string): string => {
     const originalStr = memStr;
     memStr = memStr.replace(/"/g, '').trim();
     
-    // Kubernetes memory formats can be complex - log for diagnosis
-    console.log(`Parsing memory value: '${originalStr}' -> '${memStr}'`);
-    
-    // Handle Kubernetes memory formats
-    
     // First try direct parse if it's a simple number
     if (/^\d+$/.test(memStr)) {
-      console.log(`  Direct numeric: ${memStr} bytes`);
       return memStr; // Already in bytes
     }
     
@@ -107,7 +71,6 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('Ki')) {
       const kibibytes = parseInt(memStr.slice(0, -2), 10) || 0;
       const bytes = kibibytes * 1024;
-      console.log(`  Ki format: ${kibibytes}Ki = ${bytes} bytes`);
       return bytes.toString(); // Convert to bytes
     }
     
@@ -115,7 +78,6 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('Mi')) {
       const mebibytes = parseInt(memStr.slice(0, -2), 10) || 0;
       const bytes = mebibytes * 1024 * 1024;
-      console.log(`  Mi format: ${mebibytes}Mi = ${bytes} bytes`);
       return bytes.toString(); // Convert to bytes
     }
     
@@ -123,7 +85,6 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('Gi')) {
       const gibibytes = parseInt(memStr.slice(0, -2), 10) || 0;
       const bytes = gibibytes * 1024 * 1024 * 1024;
-      console.log(`  Gi format: ${gibibytes}Gi = ${bytes} bytes`);
       return bytes.toString(); // Convert to bytes
     }
     
@@ -131,62 +92,28 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('K')) {
       const kilobytes = parseInt(memStr.slice(0, -1), 10) || 0;
       const bytes = kilobytes * 1000;
-      console.log(`  K format: ${kilobytes}K = ${bytes} bytes`);
       return bytes.toString();
     }
     
     if (memStr.endsWith('M')) {
       const megabytes = parseInt(memStr.slice(0, -1), 10) || 0;
       const bytes = megabytes * 1000 * 1000;
-      console.log(`  M format: ${megabytes}M = ${bytes} bytes`);
       return bytes.toString();
     }
     
     if (memStr.endsWith('G')) {
       const gigabytes = parseInt(memStr.slice(0, -1), 10) || 0;
       const bytes = gigabytes * 1000 * 1000 * 1000;
-      console.log(`  G format: ${gigabytes}G = ${bytes} bytes`);
       return bytes.toString();
-    }
-    
-    // Handle bytes, KB, MB, GB without 'i'
-    if (memStr.endsWith('B')) {
-      // Plain bytes
-      if (memStr.length === 1 || memStr[memStr.length - 2] === ' ') {
-        console.log(`  Plain bytes: ${memStr}`);
-        return memStr.replace('B', '');
-      }
-      
-      // KB, MB, GB
-      if (memStr.endsWith('KB')) {
-        const kb = parseInt(memStr.slice(0, -2), 10) || 0;
-        const bytes = kb * 1000;
-        console.log(`  KB format: ${kb}KB = ${bytes} bytes`);
-        return bytes.toString();
-      }
-      if (memStr.endsWith('MB')) {
-        const mb = parseInt(memStr.slice(0, -2), 10) || 0;
-        const bytes = mb * 1000 * 1000;
-        console.log(`  MB format: ${mb}MB = ${bytes} bytes`);
-        return bytes.toString();
-      }
-      if (memStr.endsWith('GB')) {
-        const gb = parseInt(memStr.slice(0, -2), 10) || 0;
-        const bytes = gb * 1000 * 1000 * 1000;
-        console.log(`  GB format: ${gb}GB = ${bytes} bytes`);
-        return bytes.toString();
-      }
     }
     
     // Extract numeric part as a fallback
     const matches = memStr.match(/[\d.]+/);
     if (matches) {
-      console.log(`  Extracted numeric part from '${memStr}': ${matches[0]}`);
       return matches[0];
     }
     
     // If nothing else works, return 0
-    console.log(`  Failed to parse memory value: '${originalStr}'`);
     return '0';
   } catch (error) {
     console.error(`Error parsing memory value '${memStr}':`, error);
@@ -213,8 +140,6 @@ const formatMemoryForDisplay = (memStr: string): string => {
   const mem = parseFloat(memStr);
   if (isNaN(mem) || mem === 0) return '0';
   
-  // For nodegroups, we want to display memory in Gi for better readability
-  // Each node in a nodegroup typically has several Gi of memory
   const gigabytes = mem / (1024 * 1024 * 1024);
   if (gigabytes >= 1) {
     return `${gigabytes.toFixed(0)}Gi`;
@@ -235,8 +160,6 @@ const formatNodeGroupMemory = (memStr: string): string => {
   // Always convert to Gi for nodegroups
   const gigabytes = mem / (1024 * 1024 * 1024);
   
-  console.log(`formatNodeGroupMemory: Converting ${mem} bytes to ${gigabytes.toFixed(2)} Gi`);
-  
   // If the value is less than 1 Gi but not 0, show it with 1 decimal place
   if (gigabytes < 1 && gigabytes > 0) {
     return `${gigabytes.toFixed(1)}Gi`;
@@ -244,6 +167,57 @@ const formatNodeGroupMemory = (memStr: string): string => {
   
   // For larger values, round to the nearest integer
   return `${Math.round(gigabytes)}Gi`;
+};
+
+// Get the kubeconfig file path
+const getKubeconfigPath = (): string => {
+  const kubeconfigEnv = process.env.KUBECONFIG;
+  if (kubeconfigEnv) {
+    return kubeconfigEnv;
+  }
+  return path.join(os.homedir(), '.kube', 'config');
+};
+
+// Load kubeconfig
+export const loadKubeConfig = (): k8s.KubeConfig => {
+  const kc = new k8s.KubeConfig();
+  try {
+    const kubeconfigPath = getKubeconfigPath();
+    if (fs.existsSync(kubeconfigPath)) {
+      kc.loadFromFile(kubeconfigPath);
+    } else {
+      kc.loadFromDefault();
+    }
+  } catch (error) {
+    console.error('Error loading kubeconfig:', error);
+    kc.loadFromDefault();
+  }
+  return kc;
+};
+
+// Get available clusters
+export const getClusters = (): Cluster[] => {
+  const kc = loadKubeConfig();
+  
+  return kc.getContexts().map(context => {
+    const cluster = kc.getCluster(context.cluster);
+    return {
+      name: context.name,
+      context: context.cluster,
+      server: cluster?.server || 'Unknown',
+      displayName: '' // Client will populate this from localStorage
+    };
+  });
+};
+
+// Rest of server-side Kubernetes API functions...
+// Function signatures should match the original file
+// to ensure compatibility
+
+// Get a cluster by name
+export const getClusterByName = (name: string): Cluster | null => {
+  const clusters = getClusters();
+  return clusters.find(cluster => cluster.name === name) || null;
 };
 
 // Use Node.js native https module to make requests without certificate validation
@@ -301,55 +275,7 @@ const fetchWithoutCertValidation = async (urlString: string, options: any = {}):
     // Send the request
     req.end();
   });
-};
-
-// Get the kubeconfig file path
-const getKubeconfigPath = (): string => {
-  const kubeconfigEnv = process.env.KUBECONFIG;
-  if (kubeconfigEnv) {
-    return kubeconfigEnv;
-  }
-  return path.join(os.homedir(), '.kube', 'config');
-};
-
-// Load kubeconfig
-export const loadKubeConfig = (): k8s.KubeConfig => {
-  const kc = new k8s.KubeConfig();
-  try {
-    const kubeconfigPath = getKubeconfigPath();
-    if (fs.existsSync(kubeconfigPath)) {
-      kc.loadFromFile(kubeconfigPath);
-    } else {
-      kc.loadFromDefault();
-    }
-  } catch (error) {
-    console.error('Error loading kubeconfig:', error);
-    kc.loadFromDefault();
-  }
-  return kc;
-};
-
-// Get available clusters
-export const getClusters = (): Cluster[] => {
-  const kc = loadKubeConfig();
-  const displayNames = getClusterDisplayNames();
-  
-  return kc.getContexts().map(context => {
-    const cluster = kc.getCluster(context.cluster);
-    return {
-      name: context.name,
-      context: context.cluster,
-      server: cluster?.server || 'Unknown',
-      displayName: displayNames[context.name] || ''
-    };
-  });
-};
-
-// Get a cluster by name
-export const getClusterByName = (name: string): Cluster | null => {
-  const clusters = getClusters();
-  return clusters.find(cluster => cluster.name === name) || null;
-};
+}; 
 
 // Get a client for a specific cluster
 export const getClientForCluster = (clusterName: string): {
@@ -406,26 +332,6 @@ export const getClientForCluster = (clusterName: string): {
           return { body: data };
         } catch (err) {
           console.error('Error fetching node metrics directly:', err);
-          
-          // Provide more detailed error logging
-          if (err instanceof Error) {
-            // Log the error details
-            console.error('Error details:', {
-              message: err.message,
-              stack: err.stack,
-              cause: err.cause ? (err.cause as Error).message : 'No cause',
-              code: (err as any).code
-            });
-            
-            // Log a more user-friendly message
-            if ((err as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
-              console.error('This appears to be an SSL certificate verification issue. Using insecure connections to bypass.');
-            } else if ((err as any).code === 'ECONNREFUSED') {
-              console.error('Connection refused. Make sure the Kubernetes API server is accessible.');
-            }
-          }
-          
-          // Continue with empty metrics
           return { body: { items: [] } };
         }
       },
@@ -452,26 +358,6 @@ export const getClientForCluster = (clusterName: string): {
           return { body: data };
         } catch (err) {
           console.error('Error fetching pod metrics directly:', err);
-          
-          // Provide more detailed error logging
-          if (err instanceof Error) {
-            // Log the error details
-            console.error('Error details:', {
-              message: err.message,
-              stack: err.stack,
-              cause: err.cause ? (err.cause as Error).message : 'No cause',
-              code: (err as any).code
-            });
-            
-            // Log a more user-friendly message
-            if ((err as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
-              console.error('This appears to be an SSL certificate verification issue. Using insecure connections to bypass.');
-            } else if ((err as any).code === 'ECONNREFUSED') {
-              console.error('Connection refused. Make sure the Kubernetes API server is accessible.');
-            }
-          }
-          
-          // Continue with empty metrics
           return { body: { items: [] } };
         }
       }
@@ -558,25 +444,15 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
         let cpuUsage = metrics?.usage?.cpu || '0';
         let memoryUsage = metrics?.usage?.memory || '0';
         
-        // Log raw values for debugging
-        console.log(`Node ${node.metadata?.name} raw memory values: capacity=${memoryCapacity}, usage=${memoryUsage}`);
-        
         // Parse CPU and memory values to get normalized numeric values
-        // IMPORTANT: For memory, use allocatable rather than capacity, which is more accurate
-        // for what's actually available to pods
         const parsedCpuCapacity = parseCpuValue(cpuCapacity);
         const parsedCpuUsage = parseCpuValue(cpuUsage);
         const parsedMemCapacity = parseMemoryValue(memoryAllocatable); // Use allocatable instead of capacity
         const parsedMemUsage = parseMemoryValue(memoryUsage);
         
-        console.log(`Node ${node.metadata?.name} parsed memory: allocatable=${parsedMemCapacity}, usage=${parsedMemUsage}`);
-        
         // Ensure usage doesn't exceed capacity
         const validatedCpuUsage = Math.min(parseFloat(parsedCpuUsage), parseFloat(parsedCpuCapacity)).toString();
         const validatedMemUsage = Math.min(parseFloat(parsedMemUsage), parseFloat(parsedMemCapacity)).toString();
-        
-        // Log validated values
-        console.log(`Node ${node.metadata?.name} validated memory usage: ${validatedMemUsage} (${(parseFloat(validatedMemUsage) / parseFloat(parsedMemCapacity) * 100).toFixed(2)}%)`);
         
         // Parse instance type from labels
         const instanceType = node.metadata?.labels?.['node.kubernetes.io/instance-type'] ||
@@ -695,18 +571,11 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         const validatedCpuUsage = Math.min(cpuUsage, cpuCapacity);
         
         // Get memory values directly from the node's allocatable & capacity field
-        // For true capacity, use the capacity field rather than allocatable
-        // which can be less due to system reservations
         const memCapacityBytes = parseFloat(parseMemoryValue(node.capacity.memory));
-        // Convert to Gi for easier debugging
-        const memCapacityGi = memCapacityBytes / (1024 * 1024 * 1024);
         
         // Get memory usage
         const memUsageBytes = parseFloat(parseMemoryValue(node.usage.memory));
         const validatedMemUsage = Math.min(memUsageBytes, memCapacityBytes);
-        
-        console.log(`Node ${node.name} (${node.instanceType}): Memory Capacity=${formatMemoryForDisplay(node.capacity.memory)} (${memCapacityGi.toFixed(2)}Gi)`);
-        console.log(`Allocatable: ${node.allocatable.memory}, Usage: ${node.usage.memory}`);
         
         // Add values to node group totals
         nodeGroup.totalCpu = (parseFloat(nodeGroup.totalCpu) + cpuCapacity).toString();
@@ -714,18 +583,12 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         nodeGroup.totalMemory = (parseFloat(nodeGroup.totalMemory) + memCapacityBytes).toString();
         nodeGroup.usedMemory = (parseFloat(nodeGroup.usedMemory) + validatedMemUsage).toString();
         
-        // Log updated group totals
-        const groupTotalGi = parseFloat(nodeGroup.totalMemory) / (1024 * 1024 * 1024);
-        console.log(`NodeGroup ${nodeGroupName} now has ${nodeGroup.nodes.length} nodes, ${groupTotalGi.toFixed(2)}Gi total memory`);
-        
       } catch (error) {
         console.error(`Error calculating node metrics for ${node.name}:`, error);
       }
       
       nodeGroup.podsCount += node.pods;
     });
-    
-    console.log("=== FORMATTING NODE GROUP VALUES ===");
     
     // Convert map to array and format values
     const formattedNodeGroups = Array.from(nodeGroups.values()).map(nodeGroup => {
@@ -748,8 +611,6 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         const totalMemoryGi = totalMemory / (1024 * 1024 * 1024);
         // Ensure we don't show partial gigabytes for node groups
         const totalMemoryDisplay = `${Math.round(totalMemoryGi)}Gi`;
-        
-        console.log(`NodeGroup ${nodeGroup.name}: ${nodeGroup.nodes.length} nodes, CPU=${formattedUsedCpu}/${formattedTotalCpu}, Memory=${totalMemoryDisplay}`);
         
         // Return the formatted node group data
         return {
@@ -778,11 +639,6 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
           memPercentage: 0
         };
       }
-    });
-    
-    console.log("=== COMPLETED NODE GROUP CALCULATION ===");
-    formattedNodeGroups.forEach(ng => {
-      console.log(`NodeGroup ${ng.name}: CPU=${ng.usedCpu}/${ng.totalCpu} (${ng.cpuPercentage}%), Memory=${ng.totalMemory} (${ng.memPercentage}%)`);
     });
     
     return formattedNodeGroups;
