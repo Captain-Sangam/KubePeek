@@ -5,6 +5,7 @@ import { Box, Typography, Tabs, Tab, CircularProgress, Alert } from '@mui/materi
 import NodesTable from './NodesTable';
 import PodsTable from './PodsTable';
 import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
+import { useTheme } from '../lib/ThemeProvider';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -42,6 +43,7 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [selectedNodeGroup, setSelectedNodeGroup] = useState<string | null>(null);
+  const { mode } = useTheme();
 
   useEffect(() => {
     const fetchClusterDetails = async () => {
@@ -168,7 +170,15 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
 
   if (error) {
     return (
-      <Alert severity="error" sx={{ m: 1, py: 0.5, fontSize: '0.8rem' }}>
+      <Alert 
+        severity="error" 
+        sx={{ 
+          m: 1, 
+          py: 0.5, 
+          fontSize: '0.8rem',
+          color: mode === 'light' ? undefined : '#fff' 
+        }}
+      >
         {error}
       </Alert>
     );
@@ -176,19 +186,37 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
 
   return (
     <Box sx={{ height: '100%' }}>
-      <Typography variant="subtitle1" sx={{ mb: 1, fontSize: '1rem', fontWeight: 'bold' }}>
+      <Typography 
+        variant="subtitle1" 
+        sx={{ 
+          mb: 1, 
+          fontSize: '1rem', 
+          fontWeight: 600,
+          color: mode === 'light' ? '#212121' : '#e0e0e0'
+        }}
+      >
         {cluster.displayName || cluster.name}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontSize: '0.75rem' }}>
+      <Typography 
+        variant="body2" 
+        color={mode === 'light' ? 'text.secondary' : '#b0b0b0'} 
+        sx={{ mb: 1.5, fontSize: '0.75rem' }}
+      >
         {cluster.server}
         {cluster.displayName && (
-          <Box component="span" sx={{ ml: 1, color: 'text.disabled' }}>
+          <Box 
+            component="span" 
+            sx={{ 
+              ml: 1, 
+              color: mode === 'light' ? 'text.disabled' : '#909090'
+            }}
+          >
             (Original name: {cluster.name})
           </Box>
         )}
       </Typography>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ borderBottom: 1, borderColor: mode === 'light' ? 'divider' : 'rgba(255,255,255,0.12)' }}>
         <Tabs 
           value={tabValue} 
           onChange={handleTabChange}
@@ -197,46 +225,61 @@ export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
             '& .MuiTab-root': {
               minHeight: '36px',
               fontSize: '0.75rem',
-              padding: '6px 12px'
+              padding: '6px 12px',
+              color: mode === 'light' ? 'text.primary' : '#b0b0b0',
+              '&.Mui-selected': {
+                color: mode === 'light' ? 'primary.main' : '#fff',
+              }
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: mode === 'light' ? 'primary.main' : '#fff',
             }
           }}
         >
-          <Tab label="Nodes" />
-          <Tab label="Pods" />
+          <Tab label="Nodes" id="simple-tab-0" aria-controls="simple-tabpanel-0" disableRipple />
+          <Tab label="Pods" id="simple-tab-1" aria-controls="simple-tabpanel-1" disableRipple />
         </Tabs>
       </Box>
 
       <TabPanel value={tabValue} index={0}>
         <NodesTable 
-          nodes={nodes} 
-          nodeGroups={nodeGroups} 
+          nodes={nodes}
+          nodeGroups={nodeGroups}
           onNodeSelect={handleNodeSelect}
           onNodeGroupSelect={handleNodeGroupSelect}
         />
       </TabPanel>
-
       <TabPanel value={tabValue} index={1}>
-        <Box sx={{ mb: 1 }}>
+        <Box sx={{ height: '100%' }}>
           {(selectedNode || selectedNodeGroup) && (
-            <Alert 
-              severity="info" 
-              sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }}
-              action={
-                <Typography 
-                  variant="body2" 
-                  sx={{ cursor: 'pointer', textDecoration: 'underline', fontSize: '0.75rem' }}
-                  onClick={clearFilters}
-                >
-                  Clear filters
-                </Typography>
-              }
-            >
-              {selectedNode && `Showing pods on node: ${selectedNode}`}
-              {selectedNodeGroup && `Showing pods in node group: ${selectedNodeGroup}`}
-            </Alert>
+            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
+              <Typography 
+                variant="body2" 
+                sx={{ mr: 1, fontSize: '0.8rem', color: mode === 'light' ? 'text.secondary' : '#b0b0b0' }}
+              >
+                {selectedNode 
+                  ? `Showing pods on node: ${selectedNode}` 
+                  : `Showing pods in node group: ${selectedNodeGroup}`}
+              </Typography>
+              <Box 
+                component="span" 
+                onClick={clearFilters}
+                sx={{ 
+                  fontSize: '0.8rem', 
+                  color: 'primary.main', 
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  '&:hover': { 
+                    color: mode === 'light' ? 'primary.dark' : 'primary.light',
+                  }
+                }}
+              >
+                (Clear filter)
+              </Box>
+            </Box>
           )}
+          <PodsTable pods={filteredPods} cluster={cluster} />
         </Box>
-        <PodsTable pods={filteredPods} />
       </TabPanel>
     </Box>
   );

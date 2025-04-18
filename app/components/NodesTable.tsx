@@ -11,6 +11,7 @@ import {
   KeyboardArrowUp as ExpandLessIcon
 } from '@mui/icons-material';
 import { Node, NodeGroupInfo } from '../types/kubernetes';
+import { useTheme } from '../lib/ThemeProvider';
 
 type Order = 'asc' | 'desc';
 
@@ -30,6 +31,18 @@ const headCells: HeadCell[] = [
   { id: 'pods', label: 'Pods', sortable: true },
   { id: 'actions', label: '', sortable: false },
 ];
+
+// Define column widths for consistent alignment
+const columnWidths = {
+  name: '25%',
+  instanceType: '12%',
+  cpu: '8%',
+  memory: '10%',
+  cpuUtil: '12%',
+  memUtil: '12%',
+  pods: '8%',
+  actions: '5%'
+};
 
 interface NodeRowProps {
   node: Node;
@@ -119,6 +132,7 @@ const parseNumericValue = (valueStr: string): number => {
 
 function NodeRow({ node, onNodeSelect }: NodeRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const { mode } = useTheme();
 
   const handleExpandClick = () => {
     setExpanded(!expanded);
@@ -164,21 +178,71 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
   return (
     <>
       <TableRow sx={{ '& > *': { borderBottom: 'unset' } }}>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
+        <TableCell 
+          sx={{ 
+            py: 0.5, 
+            px: 1, 
+            width: columnWidths.name,
+            maxWidth: columnWidths.name
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Typography variant="body2" sx={{ 
               fontWeight: 'medium', 
               cursor: 'pointer',
-              fontSize: '0.75rem' 
+              fontSize: '0.75rem',
+              color: mode === 'light' ? '#212121' : '#e0e0e0'
             }} onClick={() => onNodeSelect(node.name)}>
               {node.name}
             </Typography>
           </Box>
         </TableCell>
-        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{node.instanceType || 'Unknown'}</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{node.capacity.cpu}</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{node.capacity.memory}</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
+        <TableCell 
+          sx={{ 
+            py: 0.5, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.instanceType,
+            maxWidth: columnWidths.instanceType
+          }}
+        >
+          {node.instanceType || 'Unknown'}
+        </TableCell>
+        <TableCell 
+          align="right"
+          sx={{ 
+            py: 0.5, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.cpu,
+            maxWidth: columnWidths.cpu
+          }}
+        >
+          {node.capacity.cpu}
+        </TableCell>
+        <TableCell 
+          align="right"
+          sx={{ 
+            py: 0.5, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.memory,
+            maxWidth: columnWidths.memory
+          }}
+        >
+          {node.capacity.memory}
+        </TableCell>
+        <TableCell 
+          sx={{ 
+            py: 0.5, 
+            px: 1,
+            width: columnWidths.cpuUtil,
+            maxWidth: columnWidths.cpuUtil
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={cpuUsagePercent} 
@@ -186,12 +250,19 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
                 color={cpuUsagePercent > 80 ? 'error' : cpuUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 30 }}>
-              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 35, textAlign: 'right' }}>
+              <Typography variant="body2" color={mode === 'light' ? 'text.secondary' : '#b0b0b0'} fontSize="0.7rem">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
+        <TableCell 
+          sx={{ 
+            py: 0.5, 
+            px: 1,
+            width: columnWidths.memUtil,
+            maxWidth: columnWidths.memUtil
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={memUsagePercent} 
@@ -199,18 +270,38 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
                 color={memUsagePercent > 80 ? 'error' : memUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 30 }}>
-              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${memUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 35, textAlign: 'right' }}>
+              <Typography variant="body2" color={mode === 'light' ? 'text.secondary' : '#b0b0b0'} fontSize="0.7rem">{`${memUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell sx={{ py: 0.5, px: 1 }}>{node.pods}</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
+        <TableCell 
+          align="right"
+          sx={{ 
+            py: 0.5, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.pods,
+            maxWidth: columnWidths.pods
+          }}
+        >
+          {node.pods}
+        </TableCell>
+        <TableCell 
+          align="center"
+          sx={{ 
+            py: 0.5, 
+            px: 1,
+            width: columnWidths.actions,
+            maxWidth: columnWidths.actions
+          }}
+        >
           <IconButton
             aria-label="expand row"
             size="small"
             onClick={handleExpandClick}
-            sx={{ p: 0.5, mr: 0.5 }}
+            sx={{ p: 0.5 }}
           >
             {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
@@ -256,6 +347,7 @@ interface NodeGroupRowProps {
 
 function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const { mode } = useTheme();
 
   const handleExpandClick = () => {
     setExpanded(!expanded);
@@ -316,38 +408,93 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
 
   return (
     <>
-      <TableRow sx={{ 
-        '&:hover': { bgcolor: 'action.hover' },
-        bgcolor: expanded ? 'rgba(0, 0, 0, 0.04)' : 'inherit',
-        '& > *:last-child': { pr: 1 }  // Ensure proper padding on the last cell
-      }}>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
+      <TableRow 
+        sx={{ 
+          cursor: 'pointer',
+          '&:hover': {
+            backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.04)'
+          }
+        }}
+      >
+        <TableCell 
+          sx={{ 
+            py: 0.75, 
+            px: 1,
+            width: columnWidths.name,
+            maxWidth: columnWidths.name
+          }} 
+        >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <IconButton
               aria-label="expand row"
               size="small"
-              onClick={handleExpandClick}
-              sx={{ p: 0.5, mr: 0.5 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleExpandClick();
+              }}
+              sx={{ mr: 1, color: mode === 'light' ? 'inherit' : '#e0e0e0' }}
             >
               {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </IconButton>
             <Typography 
               variant="body2" 
               sx={{ 
-                fontWeight: 'bold', 
-                cursor: 'pointer',
-                fontSize: '0.75rem' 
-              }} 
-              onClick={() => onNodeGroupSelect(nodeGroup.name)}
+                fontWeight: 500,
+                color: mode === 'light' ? '#212121' : '#e0e0e0',
+                fontSize: '0.75rem'
+              }}
+              onClick={handleExpandClick}
             >
               {nodeGroup.name}
             </Typography>
           </Box>
         </TableCell>
-        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>Group ({nodeGroup.nodes.length} nodes)</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{nodeGroup.totalCpu}</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{nodeGroup.totalMemory}</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
+        <TableCell 
+          sx={{ 
+            py: 0.75, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.instanceType,
+            maxWidth: columnWidths.instanceType
+          }}
+        >
+          {nodeGroup.nodes.length === 1 ? '(1 node)' : `(${nodeGroup.nodes.length} nodes)`}
+        </TableCell>
+        <TableCell 
+          align="right"
+          sx={{ 
+            py: 0.75, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.cpu,
+            maxWidth: columnWidths.cpu
+          }}
+        >
+          {nodeGroup.totalCpu}
+        </TableCell>
+        <TableCell 
+          align="right"
+          sx={{ 
+            py: 0.75, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.memory,
+            maxWidth: columnWidths.memory
+          }}
+        >
+          {nodeGroup.totalMemory}
+        </TableCell>
+        <TableCell 
+          sx={{ 
+            py: 0.75, 
+            px: 1,
+            width: columnWidths.cpuUtil,
+            maxWidth: columnWidths.cpuUtil
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={cpuUsagePercent} 
@@ -355,12 +502,19 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
                 color={cpuUsagePercent > 80 ? 'error' : cpuUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 30 }}>
-              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 35, textAlign: 'right' }}>
+              <Typography variant="body2" color={mode === 'light' ? 'text.secondary' : '#b0b0b0'} fontSize="0.7rem">{`${cpuUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
+        <TableCell 
+          sx={{ 
+            py: 0.75, 
+            px: 1,
+            width: columnWidths.memUtil,
+            maxWidth: columnWidths.memUtil
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: '100%', mr: 1 }}>
               <LinearProgress variant="determinate" value={memUsagePercent} 
@@ -368,22 +522,30 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
                 color={memUsagePercent > 80 ? 'error' : memUsagePercent > 60 ? 'warning' : 'primary'}
               />
             </Box>
-            <Box sx={{ minWidth: 30 }}>
-              <Typography variant="body2" color="text.secondary" fontSize="0.7rem">{`${memUsagePercent.toFixed(0)}%`}</Typography>
+            <Box sx={{ minWidth: 35, textAlign: 'right' }}>
+              <Typography variant="body2" color={mode === 'light' ? 'text.secondary' : '#b0b0b0'} fontSize="0.7rem">{`${memUsagePercent.toFixed(0)}%`}</Typography>
             </Box>
           </Box>
         </TableCell>
-        <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.75rem' }}>{nodeGroup.podsCount}</TableCell>
-        <TableCell sx={{ py: 0.5, px: 1 }}>
-          <IconButton
-            aria-label="expand row"
-            size="small"
-            onClick={handleExpandClick}
-            sx={{ p: 0.5, mr: 0.5 }}
-          >
-            {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-          </IconButton>
+        <TableCell 
+          align="right"
+          sx={{ 
+            py: 0.75, 
+            px: 1, 
+            fontSize: '0.75rem', 
+            color: mode === 'light' ? '#212121' : '#e0e0e0',
+            width: columnWidths.pods,
+            maxWidth: columnWidths.pods
+          }}
+        >
+          {nodeGroup.podsCount}
         </TableCell>
+        <TableCell 
+          sx={{ 
+            width: columnWidths.actions,
+            maxWidth: columnWidths.actions
+          }}
+        />
       </TableRow>
       <TableRow>
         <TableCell colSpan={8} style={{ paddingBottom: 0, paddingTop: 0 }}>
@@ -447,6 +609,7 @@ export default function NodesTable({
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<keyof Node>('name');
   const [viewMode, setViewMode] = useState<'nodes' | 'nodeGroups'>('nodeGroups');
+  const { mode } = useTheme();
 
   const handleRequestSort = (property: keyof Node) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -506,34 +669,70 @@ export default function NodesTable({
       </Box>
 
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 180px)' }}>
-        <Table stickyHeader size="small" sx={{ minWidth: 650 }}>
+        <Table stickyHeader size="small" sx={{ minWidth: 650, tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow>
-              {headCells.map((headCell) => (
-                <TableCell
-                  key={headCell.id + headCell.label}
-                  sortDirection={orderBy === headCell.id ? order : false}
-                  sx={{ 
-                    backgroundColor: 'background.paper',
-                    py: 0.75,
-                    px: 1,
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {headCell.sortable ? (
-                    <TableSortLabel
-                      active={orderBy === headCell.id}
-                      direction={orderBy === headCell.id ? order : 'asc'}
-                      onClick={() => handleRequestSort(headCell.id as keyof Node)}
-                    >
-                      {headCell.label}
-                    </TableSortLabel>
-                  ) : (
-                    headCell.label
-                  )}
-                </TableCell>
-              ))}
+              {headCells.map((headCell, index) => {
+                let width = columnWidths.name;
+                let textAlign: "left" | "right" | "center" = "left";
+                
+                // Set width and alignment based on column type
+                if (headCell.id === 'name') width = columnWidths.name;
+                else if (headCell.id === 'instanceType') width = columnWidths.instanceType;
+                else if (headCell.id === 'capacity' && headCell.label === 'CPU') {
+                  width = columnWidths.cpu;
+                  textAlign = "right";
+                }
+                else if (headCell.id === 'capacity' && headCell.label === 'Memory') {
+                  width = columnWidths.memory;
+                  textAlign = "right";
+                }
+                else if (headCell.id === 'utilization' && headCell.label === 'CPU Util.') width = columnWidths.cpuUtil;
+                else if (headCell.id === 'utilization' && headCell.label === 'Memory Util.') width = columnWidths.memUtil;
+                else if (headCell.id === 'pods') {
+                  width = columnWidths.pods;
+                  textAlign = "right";
+                }
+                else if (headCell.id === 'actions') {
+                  width = columnWidths.actions;
+                  textAlign = "center";
+                }
+                
+                return (
+                  <TableCell
+                    align={textAlign}
+                    key={`${headCell.id}-${index}`}
+                    sortDirection={orderBy === headCell.id ? order : false}
+                    sx={{ 
+                      fontWeight: 600, 
+                      py: 1.5,
+                      fontSize: '0.75rem',
+                      color: mode === 'light' ? '#212121' : '#e0e0e0',
+                      backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.05)',
+                      width: width,
+                      maxWidth: width
+                    }}
+                  >
+                    {headCell.sortable ? (
+                      <TableSortLabel
+                        active={orderBy === headCell.id}
+                        direction={orderBy === headCell.id ? order : 'asc'}
+                        onClick={() => handleRequestSort(headCell.id as keyof Node)}
+                        sx={{
+                          color: mode === 'light' ? 'inherit' : '#e0e0e0',
+                          '& .MuiTableSortLabel-icon': {
+                            color: mode === 'light' ? 'inherit !important' : '#e0e0e0 !important'
+                          }
+                        }}
+                      >
+                        {headCell.label}
+                      </TableSortLabel>
+                    ) : (
+                      headCell.label
+                    )}
+                  </TableCell>
+                );
+              })}
             </TableRow>
           </TableHead>
           <TableBody>

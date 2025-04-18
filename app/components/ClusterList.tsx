@@ -5,6 +5,7 @@ import { List, ListItem, ListItemButton, ListItemText, Typography, Divider, Circ
 import { Cluster } from '../types/kubernetes';
 import { CloudCircle as CloudIcon, Edit as EditIcon } from '@mui/icons-material';
 import { saveClusterDisplayName } from '../lib/kubernetes-client';
+import { useTheme } from '../lib/ThemeProvider';
 
 interface ClusterListProps {
   clusters: Cluster[];
@@ -22,10 +23,11 @@ export default function ClusterList({
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { mode } = useTheme();
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
         <CircularProgress size={20} />
       </Box>
     );
@@ -33,8 +35,8 @@ export default function ClusterList({
 
   if (clusters.length === 0) {
     return (
-      <Box sx={{ p: 1, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary" fontSize="0.75rem">
+      <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Typography variant="body1" color="text.secondary" fontSize="0.875rem">
           No Kubernetes clusters found
         </Typography>
       </Box>
@@ -113,20 +115,29 @@ export default function ClusterList({
 
   return (
     <>
-      <Typography variant="subtitle1" sx={{ mb: 1, fontSize: '0.9rem', fontWeight: 'bold' }}>
+      <Typography 
+        variant="subtitle1" 
+        sx={{ 
+          mb: 1.5, 
+          fontSize: '0.9rem', 
+          fontWeight: 600,
+          px: 1
+        }}
+      >
         Clusters
       </Typography>
-      <Divider sx={{ mb: 1 }} />
-      <List sx={{ p: 0 }} dense>
+      <Divider sx={{ mb: 1.5 }} />
+      <List sx={{ p: 0, overflowY: 'auto' }} dense>
         {clusters.map((cluster) => (
           <ListItem 
             key={cluster.name} 
             disablePadding
             sx={{ 
-              pr: 0,  // Remove right padding so selection color extends fully
+              px: 1,
+              mb: 0.5,
               '&:hover': {
                 '& .MuiIconButton-root': { 
-                  visibility: 'visible'
+                  opacity: 1
                 }
               }
             }}
@@ -135,26 +146,30 @@ export default function ClusterList({
               selected={selectedCluster?.name === cluster.name}
               onClick={() => onSelectCluster(cluster)}
               sx={{
-                borderRadius: 1,
-                py: 0.5,
-                px: 1,
-                minHeight: '36px',
-                mb: 0.2,
+                borderRadius: 1.5,
+                py: 1,
+                px: 1.5,
+                minHeight: '40px',
                 width: '100%',
-                pr: 6, // Add right padding to make room for the button
+                pr: 6,
                 '&.Mui-selected': {
-                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                  backgroundColor: mode === 'light' 
+                    ? 'rgba(25, 118, 210, 0.08)'
+                    : 'rgba(64, 148, 247, 0.16)',
                   '&:hover': {
-                    backgroundColor: 'rgba(25, 118, 210, 0.12)',
+                    backgroundColor: mode === 'light'
+                      ? 'rgba(25, 118, 210, 0.12)'
+                      : 'rgba(64, 148, 247, 0.24)',
                   },
                 },
+                transition: 'background-color 0.15s ease-in-out',
               }}
             >
               <CloudIcon 
                 sx={{ 
-                  mr: 0.5, 
-                  color: selectedCluster?.name === cluster.name ? 'primary.main' : 'primary.light',
-                  fontSize: '0.85rem'
+                  mr: 1, 
+                  color: selectedCluster?.name === cluster.name ? 'primary.main' : 'text.secondary',
+                  fontSize: '1rem'
                 }} 
               />
               <ListItemText 
@@ -162,9 +177,9 @@ export default function ClusterList({
                 secondary={cluster.server}
                 primaryTypographyProps={{
                   variant: 'body2',
-                  fontWeight: selectedCluster?.name === cluster.name ? 'bold' : 'normal',
+                  fontWeight: selectedCluster?.name === cluster.name ? 500 : 400,
                   noWrap: true,
-                  fontSize: '0.8rem',
+                  fontSize: '0.875rem',
                   sx: { 
                     maxWidth: '100%', 
                     overflow: 'hidden', 
@@ -175,8 +190,13 @@ export default function ClusterList({
                 secondaryTypographyProps={{
                   noWrap: true,
                   variant: 'body2',
-                  fontSize: '0.65rem',
-                  sx: { maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }
+                  fontSize: '0.75rem',
+                  sx: { 
+                    maxWidth: '100%', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis',
+                    color: 'text.secondary'
+                  }
                 }}
                 sx={{ 
                   overflow: 'hidden',
@@ -192,13 +212,18 @@ export default function ClusterList({
                 }}
                 size="small"
                 sx={{ 
-                  padding: '2px',
+                  padding: '4px',
                   position: 'absolute',
                   right: 8,
-                  visibility: selectedCluster?.name === cluster.name ? 'visible' : 'hidden'
+                  opacity: selectedCluster?.name === cluster.name ? 1 : 0,
+                  transition: 'opacity 0.2s ease-in-out',
+                  bgcolor: mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
+                  '&:hover': {
+                    bgcolor: mode === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)'
+                  }
                 }}
               >
-                <EditIcon fontSize="inherit" sx={{ fontSize: '0.85rem' }} />
+                <EditIcon fontSize="inherit" sx={{ fontSize: '0.875rem' }} />
               </IconButton>
             </ListItemButton>
           </ListItem>
@@ -206,8 +231,18 @@ export default function ClusterList({
       </List>
 
       {/* Dialog for editing cluster display name */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
-        <DialogTitle>Rename Cluster</DialogTitle>
+      <Dialog 
+        open={dialogOpen} 
+        onClose={() => setDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            width: '400px',
+            maxWidth: '90vw'
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>Rename Cluster</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1 }}>
             <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -224,15 +259,40 @@ export default function ClusterList({
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Enter a friendly name for this cluster"
+              sx={{ mt: 1 }}
             />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={() => setDialogOpen(false)} 
+            variant="text"
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
           {editingCluster?.displayName && (
-            <Button onClick={handleClear} color="error">Clear</Button>
+            <Button 
+              onClick={handleClear} 
+              color="error"
+              variant="text"
+              sx={{ textTransform: 'none' }}
+            >
+              Clear
+            </Button>
           )}
-          <Button onClick={handleSave} color="primary">Save</Button>
+          <Button 
+            onClick={handleSave} 
+            color="primary"
+            variant="contained"
+            sx={{ 
+              textTransform: 'none',
+              fontWeight: 500,
+              px: 2
+            }}
+          >
+            Save
+          </Button>
         </DialogActions>
       </Dialog>
     </>
