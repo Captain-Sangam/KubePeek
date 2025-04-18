@@ -34,8 +34,8 @@ const headCells: HeadCell[] = [
 
 // Define column widths for consistent alignment
 const columnWidths = {
-  name: '25%',
-  instanceType: '12%',
+  name: '30%',
+  instanceType: '15%',
   cpu: '8%',
   memory: '10%',
   cpuUtil: '12%',
@@ -183,16 +183,29 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
             py: 0.5, 
             px: 1, 
             width: columnWidths.name,
-            maxWidth: columnWidths.name
+            maxWidth: columnWidths.name,
+            '& .node-name': {
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'inline-block'
+            }
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="body2" sx={{ 
-              fontWeight: 'medium', 
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-              color: mode === 'light' ? '#212121' : '#e0e0e0'
-            }} onClick={() => onNodeSelect(node.name)}>
+            <Typography 
+              variant="body2" 
+              className="node-name"
+              sx={{ 
+                fontWeight: 'medium', 
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                color: mode === 'light' ? '#212121' : '#e0e0e0'
+              }} 
+              onClick={() => onNodeSelect(node.name)}
+              title={node.name}
+            >
               {node.name}
             </Typography>
           </Box>
@@ -204,8 +217,12 @@ function NodeRow({ node, onNodeSelect }: NodeRowProps) {
             fontSize: '0.75rem', 
             color: mode === 'light' ? '#212121' : '#e0e0e0',
             width: columnWidths.instanceType,
-            maxWidth: columnWidths.instanceType
+            maxWidth: columnWidths.instanceType,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
           }}
+          title={node.instanceType || 'Unknown'}
         >
           {node.instanceType || 'Unknown'}
         </TableCell>
@@ -421,7 +438,14 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
             py: 0.75, 
             px: 1,
             width: columnWidths.name,
-            maxWidth: columnWidths.name
+            maxWidth: columnWidths.name,
+            '& .node-group-name': {
+              maxWidth: 'calc(100% - 30px)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'inline-block'
+            }
           }} 
         >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -432,18 +456,20 @@ function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupR
                 e.stopPropagation();
                 handleExpandClick();
               }}
-              sx={{ mr: 1, color: mode === 'light' ? 'inherit' : '#e0e0e0' }}
+              sx={{ mr: 1, color: mode === 'light' ? 'inherit' : '#e0e0e0', flexShrink: 0 }}
             >
               {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </IconButton>
             <Typography 
               variant="body2" 
+              className="node-group-name"
               sx={{ 
                 fontWeight: 500,
                 color: mode === 'light' ? '#212121' : '#e0e0e0',
                 fontSize: '0.75rem'
               }}
               onClick={handleExpandClick}
+              title={nodeGroup.name}
             >
               {nodeGroup.name}
             </Typography>
@@ -678,7 +704,12 @@ export default function NodesTable({
                 
                 // Set width and alignment based on column type
                 if (headCell.id === 'name') width = columnWidths.name;
-                else if (headCell.id === 'instanceType') width = columnWidths.instanceType;
+                else if (headCell.id === 'instanceType') {
+                  width = columnWidths.instanceType;
+                  // Display "Nodes" for nodeGroups view and "Instance Type" for nodes view
+                  const label = viewMode === 'nodeGroups' ? 'Nodes' : 'Instance Type';
+                  headCell = {...headCell, label};
+                }
                 else if (headCell.id === 'capacity' && headCell.label === 'CPU') {
                   width = columnWidths.cpu;
                   textAlign = "right";
