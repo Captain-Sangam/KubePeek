@@ -2,7 +2,67 @@ import * as k8s from '@kubernetes/client-node';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as https from 'https';
+import * as http from 'http';
+import * as url from 'url';
 import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
+
+// Use Node.js native https module to make requests without certificate validation
+const fetchWithoutCertValidation = async (urlString: string, options: any = {}): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    // Parse the URL
+    const parsedUrl = new URL(urlString);
+    
+    // Determine if we need http or https
+    const httpModule = parsedUrl.protocol === 'https:' ? https : http;
+    
+    // Setup request options
+    const requestOptions: https.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      rejectUnauthorized: false, // This is the key setting to ignore certificate validation
+    };
+    
+    // Add any authorization headers from the original options
+    if (options.headers) {
+      requestOptions.headers = { ...requestOptions.headers, ...options.headers };
+    }
+    
+    // Make the request
+    const req = httpModule.request(requestOptions, (res) => {
+      let data = '';
+      
+      // Collect response data
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      // Resolve with response object when done
+      res.on('end', () => {
+        resolve({
+          ok: res.statusCode && res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          statusText: res.statusMessage,
+          headers: res.headers,
+          json: async () => JSON.parse(data),
+          text: async () => data
+        });
+      });
+    });
+    
+    // Handle request errors
+    req.on('error', (error) => {
+      console.error('Request error:', error);
+      reject(error);
+    });
+    
+    // Send the request
+    req.end();
+  });
+};
 
 // Get the kubeconfig file path
 const getKubeconfigPath = (): string => {
@@ -85,18 +145,41 @@ export const getClientForCluster = (clusterName: string): {
       getNodeMetrics: async () => {
         try {
           // Use request library directly instead of the client
-          const opts = {};
+          const opts = {}; 
           kc.applyToRequest(opts);
           
-          const response = await fetch(`${cluster.server}/apis/metrics.k8s.io/v1beta1/nodes`, opts);
+          // Use our custom fetch function with SSL options
+          console.log(`Fetching node metrics from ${cluster.server}/apis/metrics.k8s.io/v1beta1/nodes`);
+          const response = await fetchWithoutCertValidation(`${cluster.server}/apis/metrics.k8s.io/v1beta1/nodes`, opts);
+          
           if (!response.ok) {
-            throw new Error(`API request failed: ${response.statusText}`);
+            throw new Error(`API request failed: ${response.statusText} (${response.status})`);
           }
           
           const data = await response.json();
           return { body: data };
         } catch (err) {
           console.error('Error fetching node metrics directly:', err);
+          
+          // Provide more detailed error logging
+          if (err instanceof Error) {
+            // Log the error details
+            console.error('Error details:', {
+              message: err.message,
+              stack: err.stack,
+              cause: err.cause ? (err.cause as Error).message : 'No cause',
+              code: (err as any).code
+            });
+            
+            // Log a more user-friendly message
+            if ((err as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+              console.error('This appears to be an SSL certificate verification issue. Using insecure connections to bypass.');
+            } else if ((err as any).code === 'ECONNREFUSED') {
+              console.error('Connection refused. Make sure the Kubernetes API server is accessible.');
+            }
+          }
+          
+          // Continue with empty metrics
           return { body: { items: [] } };
         }
       },
@@ -107,15 +190,38 @@ export const getClientForCluster = (clusterName: string): {
           const opts = {};
           kc.applyToRequest(opts);
           
-          const response = await fetch(`${cluster.server}/apis/metrics.k8s.io/v1beta1/pods`, opts);
+          // Use our custom fetch function with SSL options
+          console.log(`Fetching pod metrics from ${cluster.server}/apis/metrics.k8s.io/v1beta1/pods`);
+          const response = await fetchWithoutCertValidation(`${cluster.server}/apis/metrics.k8s.io/v1beta1/pods`, opts);
+          
           if (!response.ok) {
-            throw new Error(`API request failed: ${response.statusText}`);
+            throw new Error(`API request failed: ${response.statusText} (${response.status})`);
           }
           
           const data = await response.json();
           return { body: data };
         } catch (err) {
           console.error('Error fetching pod metrics directly:', err);
+          
+          // Provide more detailed error logging
+          if (err instanceof Error) {
+            // Log the error details
+            console.error('Error details:', {
+              message: err.message,
+              stack: err.stack,
+              cause: err.cause ? (err.cause as Error).message : 'No cause',
+              code: (err as any).code
+            });
+            
+            // Log a more user-friendly message
+            if ((err as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+              console.error('This appears to be an SSL certificate verification issue. Using insecure connections to bypass.');
+            } else if ((err as any).code === 'ECONNREFUSED') {
+              console.error('Connection refused. Make sure the Kubernetes API server is accessible.');
+            }
+          }
+          
+          // Continue with empty metrics
           return { body: { items: [] } };
         }
       }
