@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'KubePeek - Kubernetes Dashboard',
   description: 'Monitor your Kubernetes clusters with a local dashboard',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
