@@ -439,13 +439,6 @@ export default function NodesTable({
               onNodeGroupSelect={onNodeGroupSelect}
             />
           ))}
-          {sortedNodes.map((node) => (
-            <NodeRow 
-              key={node.name} 
-              node={node} 
-              onNodeSelect={onNodeSelect} 
-            />
-          ))}
         </TableBody>
       </Table>
     </TableContainer>
