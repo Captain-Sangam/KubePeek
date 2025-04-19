@@ -3,9 +3,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install required system dependencies
-RUN apk add --no-cache curl python3 bash
-RUN apk add --no-cache aws-cli
-RUN apk add --no-cache kubectl
+RUN apk add --no-cache curl python3 bash aws-cli kubectl
 
 # Copy package.json and install dependencies
 COPY package.json package-lock.json* ./
@@ -21,17 +19,16 @@ RUN npm run build
 ENV NODE_ENV production
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
+ENV KUBECONFIG /root/.kube/config
 
 # Verify tools are available
 RUN which aws && which kubectl
 
-# Set up proper file structure for Next.js standalone output
-RUN cp -R .next/static ./.next/standalone/.next/static
-RUN cp -R public ./.next/standalone/public
+# Create the start script
+RUN chmod +x start.sh
 
+# Expose the application port
 EXPOSE 3000
 
-WORKDIR /app/.next/standalone
-
-# Start the server
+# Start the application
 CMD ["npm", "start"]
