@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverComponentsExternalPackages: ['@kubernetes/client-node'],
+  experimental: {
+    serverComponentsExternalPackages: ['@kubernetes/client-node'],
+  },
   output: 'standalone', // Enable standalone output for Docker
   
   // Configure webpack to handle Node.js modules
@@ -26,10 +28,7 @@ const nextConfig = {
       };
     }
     return config;
-  },
-  
-  // Add transpilePackages to ensure proper handling of dependencies
-  transpilePackages: ['@kubernetes/client-node']
+  }
 };
 
 module.exports = nextConfig; 

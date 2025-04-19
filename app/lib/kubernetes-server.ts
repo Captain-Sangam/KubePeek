@@ -837,7 +837,9 @@ export const getPodLogs = async (
       } catch (podError) {
         console.error(`Error fetching pod ${namespace}/${podName}:`, podError);
         
-        if (podError.response && podError.response.statusCode === 404) {
+        if (podError && typeof podError === 'object' && 'response' in podError && 
+            podError.response && typeof podError.response === 'object' && 
+            'statusCode' in podError.response && podError.response.statusCode === 404) {
           return { 
             success: false, 
             message: `Pod ${namespace}/${podName} not found` 
@@ -894,7 +896,9 @@ export const getPodLogs = async (
     let errorMessage = 'Unknown error occurred while fetching logs';
     
     // Handle specific kubernetes client errors
-    if (error.response && error.response.statusCode) {
+    if (error && typeof error === 'object' && 'response' in error && 
+        error.response && typeof error.response === 'object' && 
+        'statusCode' in error.response) {
       const statusCode = error.response.statusCode;
       
       if (statusCode === 404) {
@@ -902,7 +906,13 @@ export const getPodLogs = async (
       } else if (statusCode === 403) {
         errorMessage = `Access denied for pod logs ${namespace}/${podName}`;
       } else {
-        errorMessage = `Kubernetes API error (${statusCode}): ${error.response.body?.message || 'Unknown error'}`;
+        errorMessage = `Kubernetes API error (${statusCode}): ${
+          'body' in error.response && error.response.body && 
+          typeof error.response.body === 'object' && 
+          'message' in error.response.body 
+            ? error.response.body.message 
+            : 'Unknown error'
+        }`;
       }
     } else if (error instanceof Error) {
       errorMessage = error.message;
@@ -945,7 +955,9 @@ export const getPodDetails = async (
     let statusCode;
     
     // Handle specific kubernetes client errors
-    if (error.response && error.response.statusCode) {
+    if (error && typeof error === 'object' && 'response' in error && 
+        error.response && typeof error.response === 'object' && 
+        'statusCode' in error.response) {
       statusCode = error.response.statusCode;
       
       if (statusCode === 404) {
@@ -953,7 +965,13 @@ export const getPodDetails = async (
       } else if (statusCode === 403) {
         errorMessage = `Access denied for pod ${namespace}/${podName}`;
       } else {
-        errorMessage = `Kubernetes API error (${statusCode}): ${error.response.body?.message || 'Unknown error'}`;
+        errorMessage = `Kubernetes API error (${statusCode}): ${
+          'body' in error.response && error.response.body && 
+          typeof error.response.body === 'object' && 
+          'message' in error.response.body 
+            ? error.response.body.message 
+            : 'Unknown error'
+        }`;
       }
     } else if (error instanceof Error) {
       errorMessage = error.message;
@@ -971,7 +989,7 @@ export const getPodDetailsUsingKubectl = async (
   clusterName: string, 
   namespace: string, 
   podName: string
-): Promise<{ success: boolean; details?: any; message?: string }> => {
+): Promise<{ success: boolean; details?: any; message?: string; rawOutput?: string }> => {
   try {
     // Set kubectl context to the specified cluster
     const kc = loadKubeConfig();
