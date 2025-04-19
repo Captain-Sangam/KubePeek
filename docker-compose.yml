@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  kubepeek:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kubepeek:latest
+    container_name: kubepeek
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.kube:/home/nextjs/.kube:ro
+      - ${HOME}/.aws:/home/nextjs/.aws:ro
+    environment:
+      - NODE_ENV=production
+      - KUBECONFIG=/home/nextjs/.kube/config 

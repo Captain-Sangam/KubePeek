@@ -1,47 +1,37 @@
-FROM node:18-alpine AS base
+FROM node:18-alpine
 
-# Install dependencies only when needed
-FROM base AS deps
 WORKDIR /app
+
+# Install required system dependencies
+RUN apk add --no-cache curl python3 bash
+RUN apk add --no-cache aws-cli
+RUN apk add --no-cache kubectl
 
 # Copy package.json and install dependencies
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Copy the application code
 COPY . .
 
 # Build the project
 RUN npm run build
 
-# Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
-
+# Prepare for production
 ENV NODE_ENV production
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-COPY --from=builder /app/public ./public
-
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Automatically leverage output traces to reduce image size
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
-
-EXPOSE 3000
-
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
+# Verify tools are available
+RUN which aws && which kubectl
+
+# Set up proper file structure for Next.js standalone output
+RUN cp -R .next/static ./.next/standalone/.next/static
+RUN cp -R public ./.next/standalone/public
+
+EXPOSE 3000
+
+WORKDIR /app/.next/standalone
+
 # Start the server
-CMD ["node", "server.js"] 
+CMD ["npm", "start"]
