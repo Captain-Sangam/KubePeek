@@ -3,7 +3,7 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@kubernetes/client-node'],
   },
-  output: 'standalone', // Enable standalone output for Docker
+  // output: 'standalone', // Enable standalone output for Docker - removed
   
   // Configure webpack to handle Node.js modules
   webpack: (config, { isServer }) => {

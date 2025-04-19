@@ -11,8 +11,8 @@ services:
       - "3000:3000"
     restart: unless-stopped
     volumes:
-      - ${HOME}/.kube:/home/nextjs/.kube:ro
-      - ${HOME}/.aws:/home/nextjs/.aws:ro
+      - ${HOME}/.kube:/root/.kube:ro
+      - ${HOME}/.aws:/root/.aws:ro
     environment:
       - NODE_ENV=production
-      - KUBECONFIG=/home/nextjs/.kube/config 
+      - KUBECONFIG=/root/.kube/config 

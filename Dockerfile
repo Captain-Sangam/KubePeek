@@ -27,8 +27,11 @@ RUN which aws && which kubectl
 # Create the start script
 RUN chmod +x start.sh
 
+# Create necessary directories
+RUN mkdir -p /root/.kube /root/.aws
+
 # Expose the application port
 EXPOSE 3000
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["./start.sh"]
