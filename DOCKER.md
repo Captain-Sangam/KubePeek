@@ -38,7 +38,7 @@ This command:
 If your Kubernetes configuration is stored elsewhere, update the path accordingly:
 
 ```bash
-docker run -p 3000:3000 -v /path/to/your/kube/config:/home/nextjs/.kube/config kubepeek
+docker run -p 3000:3000 -v /path/to/your/kube/config:/root/.kube/config kubepeek
 ```
 
 ## Accessing the Dashboard

@@ -2,6 +2,8 @@ export interface Cluster {
   name: string;
   context: string;
   server: string;
+  displayName?: string;
+  isActive?: boolean;
 }
 
 export interface Node {
@@ -43,4 +45,6 @@ export interface NodeGroupInfo {
   usedCpu: string;
   usedMemory: string;
   podsCount: number;
+  cpuPercentage?: number;
+  memPercentage?: number;
 } 

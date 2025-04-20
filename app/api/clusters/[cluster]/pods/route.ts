@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPods } from '../../../../lib/kubernetes';
+import { getPods } from '../../../../lib/kubernetes-server';
+import { getDefaultContext, getDefaultContextName } from '../../../../lib/default-context';
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +19,18 @@ export async function GET(
   }
 
   // The cluster parameter might be URL-encoded, especially for EKS ARNs
-  const cluster = decodeURIComponent(params.cluster);
+  let cluster = decodeURIComponent(params.cluster);
+  
+  // Get the default context name
+  const defaultContextName = await getDefaultContextName();
+  
+  // If we receive the default placeholder name, replace it with the actual current context
+  if (cluster === defaultContextName) {
+    const actualContext = await getDefaultContext();
+    console.log(`API: Replacing ${defaultContextName} with actual context: ${actualContext}`);
+    cluster = actualContext;
+  }
+  
   console.log(`API: Getting pods for cluster ${cluster}`);
 
   try {

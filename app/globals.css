@@ -1,13 +1,30 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --text-primary: #212121;
+  --text-secondary: #616161;
+  --paper-background: #ffffff;
+  --divider-color: rgba(0, 0, 0, 0.12);
+  --icon-color: #333333;
+  --theme-transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html.dark-theme {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --paper-background: #1e1e1e;
+  --divider-color: rgba(255, 255, 255, 0.12);
+  --icon-color: #e0e0e0;
+}
+
+html, body {
+  transition: var(--theme-transition);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -15,6 +32,49 @@ body {
   color: var(--foreground);
   margin: 0;
   padding: 0;
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: 'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Apply theme transitions to common elements */
+button, 
+a, 
+div, 
+span, 
+p, 
+h1, h2, h3, h4, h5, h6,
+th, td,
+svg,
+.MuiPaper-root,
+.MuiTypography-root,
+.MuiTableCell-root,
+.MuiIconButton-root,
+.MuiListItemText-root,
+.MuiTableSortLabel-root {
+  transition: var(--theme-transition);
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(155, 155, 155, 0.5);
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(155, 155, 155, 0.7);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }

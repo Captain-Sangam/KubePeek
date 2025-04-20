@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  kubepeek:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kubepeek:latest
+    container_name: kubepeek
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.kube:/root/.kube:ro
+      - ${HOME}/.aws:/root/.aws:ro
+      - kubepeek_data:/tmp/kubepeek
+    environment:
+      - NODE_ENV=production
+      - KUBECONFIG=/root/.kube/config
+      - DEBUG=true
+      - STORAGE_DIR=/tmp/kubepeek
+
+volumes:
+  kubepeek_data: 

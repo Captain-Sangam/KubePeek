@@ -1,3 +1,5 @@
+'use server';
+
 import * as k8s from '@kubernetes/client-node';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,7 +9,6 @@ import * as http from 'http';
 import * as url from 'url';
 import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
 import { Options } from 'request';
-import { getClusterDisplayNames, saveClusterDisplayName } from './kubernetes-client';
 
 // Helper function to parse CPU values from Kubernetes format
 const parseCpuValue = (cpuStr: string): string => {
@@ -61,14 +62,8 @@ const parseMemoryValue = (memStr: string): string => {
     const originalStr = memStr;
     memStr = memStr.replace(/"/g, '').trim();
     
-    // Kubernetes memory formats can be complex - log for diagnosis
-    console.log(`Parsing memory value: '${originalStr}' -> '${memStr}'`);
-    
-    // Handle Kubernetes memory formats
-    
     // First try direct parse if it's a simple number
     if (/^\d+$/.test(memStr)) {
-      console.log(`  Direct numeric: ${memStr} bytes`);
       return memStr; // Already in bytes
     }
     
@@ -76,7 +71,6 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('Ki')) {
       const kibibytes = parseInt(memStr.slice(0, -2), 10) || 0;
       const bytes = kibibytes * 1024;
-      console.log(`  Ki format: ${kibibytes}Ki = ${bytes} bytes`);
       return bytes.toString(); // Convert to bytes
     }
     
@@ -84,7 +78,6 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('Mi')) {
       const mebibytes = parseInt(memStr.slice(0, -2), 10) || 0;
       const bytes = mebibytes * 1024 * 1024;
-      console.log(`  Mi format: ${mebibytes}Mi = ${bytes} bytes`);
       return bytes.toString(); // Convert to bytes
     }
     
@@ -92,7 +85,6 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('Gi')) {
       const gibibytes = parseInt(memStr.slice(0, -2), 10) || 0;
       const bytes = gibibytes * 1024 * 1024 * 1024;
-      console.log(`  Gi format: ${gibibytes}Gi = ${bytes} bytes`);
       return bytes.toString(); // Convert to bytes
     }
     
@@ -100,62 +92,28 @@ const parseMemoryValue = (memStr: string): string => {
     if (memStr.endsWith('K')) {
       const kilobytes = parseInt(memStr.slice(0, -1), 10) || 0;
       const bytes = kilobytes * 1000;
-      console.log(`  K format: ${kilobytes}K = ${bytes} bytes`);
       return bytes.toString();
     }
     
     if (memStr.endsWith('M')) {
       const megabytes = parseInt(memStr.slice(0, -1), 10) || 0;
       const bytes = megabytes * 1000 * 1000;
-      console.log(`  M format: ${megabytes}M = ${bytes} bytes`);
       return bytes.toString();
     }
     
     if (memStr.endsWith('G')) {
       const gigabytes = parseInt(memStr.slice(0, -1), 10) || 0;
       const bytes = gigabytes * 1000 * 1000 * 1000;
-      console.log(`  G format: ${gigabytes}G = ${bytes} bytes`);
       return bytes.toString();
-    }
-    
-    // Handle bytes, KB, MB, GB without 'i'
-    if (memStr.endsWith('B')) {
-      // Plain bytes
-      if (memStr.length === 1 || memStr[memStr.length - 2] === ' ') {
-        console.log(`  Plain bytes: ${memStr}`);
-        return memStr.replace('B', '');
-      }
-      
-      // KB, MB, GB
-      if (memStr.endsWith('KB')) {
-        const kb = parseInt(memStr.slice(0, -2), 10) || 0;
-        const bytes = kb * 1000;
-        console.log(`  KB format: ${kb}KB = ${bytes} bytes`);
-        return bytes.toString();
-      }
-      if (memStr.endsWith('MB')) {
-        const mb = parseInt(memStr.slice(0, -2), 10) || 0;
-        const bytes = mb * 1000 * 1000;
-        console.log(`  MB format: ${mb}MB = ${bytes} bytes`);
-        return bytes.toString();
-      }
-      if (memStr.endsWith('GB')) {
-        const gb = parseInt(memStr.slice(0, -2), 10) || 0;
-        const bytes = gb * 1000 * 1000 * 1000;
-        console.log(`  GB format: ${gb}GB = ${bytes} bytes`);
-        return bytes.toString();
-      }
     }
     
     // Extract numeric part as a fallback
     const matches = memStr.match(/[\d.]+/);
     if (matches) {
-      console.log(`  Extracted numeric part from '${memStr}': ${matches[0]}`);
       return matches[0];
     }
     
     // If nothing else works, return 0
-    console.log(`  Failed to parse memory value: '${originalStr}'`);
     return '0';
   } catch (error) {
     console.error(`Error parsing memory value '${memStr}':`, error);
@@ -182,8 +140,6 @@ const formatMemoryForDisplay = (memStr: string): string => {
   const mem = parseFloat(memStr);
   if (isNaN(mem) || mem === 0) return '0';
   
-  // For nodegroups, we want to display memory in Gi for better readability
-  // Each node in a nodegroup typically has several Gi of memory
   const gigabytes = mem / (1024 * 1024 * 1024);
   if (gigabytes >= 1) {
     return `${gigabytes.toFixed(0)}Gi`;
@@ -204,8 +160,6 @@ const formatNodeGroupMemory = (memStr: string): string => {
   // Always convert to Gi for nodegroups
   const gigabytes = mem / (1024 * 1024 * 1024);
   
-  console.log(`formatNodeGroupMemory: Converting ${mem} bytes to ${gigabytes.toFixed(2)} Gi`);
-  
   // If the value is less than 1 Gi but not 0, show it with 1 decimal place
   if (gigabytes < 1 && gigabytes > 0) {
     return `${gigabytes.toFixed(1)}Gi`;
@@ -213,6 +167,120 @@ const formatNodeGroupMemory = (memStr: string): string => {
   
   // For larger values, round to the nearest integer
   return `${Math.round(gigabytes)}Gi`;
+};
+
+// Get the kubeconfig file path
+const getKubeconfigPath = (): string => {
+  const kubeconfigEnv = process.env.KUBECONFIG;
+  const homeDir = os.homedir();
+  console.log(`[KubeConfig Debug] KUBECONFIG env: ${kubeconfigEnv}`);
+  console.log(`[KubeConfig Debug] Home directory: ${homeDir}`);
+  console.log(`[KubeConfig Debug] Current working directory: ${process.cwd()}`);
+
+  // Check if KUBECONFIG environment variable is set
+  if (kubeconfigEnv) {
+    console.log(`[KubeConfig Debug] Using KUBECONFIG env var: ${kubeconfigEnv}`);
+    return kubeconfigEnv;
+  }
+
+  // Check for common kubeconfig locations
+  const possiblePaths = [
+    path.join(homeDir, '.kube', 'config'),      // Standard path
+    '/root/.kube/config',                        // Docker container path
+    '/tmp/.kube/config',                         // Alternative container path
+    path.join(process.cwd(), '.kube', 'config')  // Relative to CWD
+  ];
+
+  // Find first existing path
+  for (const configPath of possiblePaths) {
+    if (fs.existsSync(configPath)) {
+      console.log(`[KubeConfig Debug] Found kubeconfig at: ${configPath}`);
+      return configPath;
+    }
+  }
+
+  // Default fallback
+  const defaultPath = path.join(homeDir, '.kube', 'config');
+  console.log(`[KubeConfig Debug] Using default path: ${defaultPath}`);
+  return defaultPath;
+};
+
+// Load kubeconfig
+export const loadKubeConfig = (): k8s.KubeConfig => {
+  const kc = new k8s.KubeConfig();
+  const kubeconfigPath = getKubeconfigPath();
+  console.log(`[KubeConfig Debug] Attempting to load config from: ${kubeconfigPath}`);
+  console.log(`[KubeConfig Debug] Relevant Env Vars: KUBECONFIG=${process.env.KUBECONFIG}, HOME=${process.env.HOME}, USER=${process.env.USER}, AWS_PROFILE=${process.env.AWS_PROFILE}, AWS_REGION=${process.env.AWS_REGION}`);
+
+  try {
+    const exists = fs.existsSync(kubeconfigPath);
+    console.log(`[KubeConfig Debug] Does kubeconfig file exist at '${kubeconfigPath}'? ${exists}`);
+
+    if (exists) {
+      try {
+        console.log(`[KubeConfig Debug] Loading config using kc.loadFromFile('${kubeconfigPath}')...`);
+        const fileContents = fs.readFileSync(kubeconfigPath, 'utf8');
+        console.log(`[KubeConfig Debug] Read ${fileContents.length} bytes from config file`);
+        
+        kc.loadFromFile(kubeconfigPath);
+        
+        console.log(`[KubeConfig Debug] Successfully loaded config from file.`);
+        console.log(`[KubeConfig Debug] Current context: ${kc.getCurrentContext()}`);
+        console.log(`[KubeConfig Debug] Available contexts: ${kc.getContexts().map(c => c.name).join(', ')}`);
+        
+        // If we have no contexts, try loadFromDefault as fallback
+        if (kc.getContexts().length === 0) {
+          console.log(`[KubeConfig Debug] No contexts found in file, trying loadFromDefault as fallback`);
+          kc.loadFromDefault();
+        }
+      } catch (loadError: any) {
+        console.error(`[KubeConfig Debug] Error during kc.loadFromFile('${kubeconfigPath}'):`, loadError);
+        console.error(`[KubeConfig Debug] Error details: Name=${loadError.name}, Message=${loadError.message}, Stack=${loadError.stack}`);
+        // Fallback to default to see if that works (it likely won't, but preserves original logic)
+        console.log('[KubeConfig Debug] Falling back to kc.loadFromDefault() due to loadFromFile error...');
+        kc.loadFromDefault();
+      }
+    } else {
+      console.log(`[KubeConfig Debug] Kubeconfig file not found at '${kubeconfigPath}', trying kc.loadFromDefault()...`);
+      kc.loadFromDefault();
+      console.log('[KubeConfig Debug] Loaded default config.');
+    }
+  } catch (error: any) {
+    // Catch errors from existsSync or loadFromDefault
+    console.error(`[KubeConfig Debug] General error loading kubeconfig (path: ${kubeconfigPath}):`, error);
+    console.error(`[KubeConfig Debug] General error details: Name=${error.name}, Message=${error.message}, Stack=${error.stack}`);
+    // Attempt default loading as a last resort if not already tried
+    if (!fs.existsSync(kubeconfigPath)) {
+       console.log('[KubeConfig Debug] Retrying kc.loadFromDefault() after general error...');
+       kc.loadFromDefault();
+    }
+  }
+  return kc;
+};
+
+// Get available clusters
+export const getClusters = (): Cluster[] => {
+  const kc = loadKubeConfig();
+  
+  return kc.getContexts().map(context => {
+    const cluster = kc.getCluster(context.cluster);
+    return {
+      name: context.name,
+      context: context.cluster,
+      server: cluster?.server || 'Unknown',
+      displayName: '' // Client will populate this from localStorage
+    };
+  });
+};
+
+// Rest of server-side Kubernetes API functions...
+// Function signatures should match the original file
+// to ensure compatibility
+
+// Get a cluster by name
+export const getClusterByName = (name: string): Cluster | null => {
+  const clusters = getClusters();
+  return clusters.find(cluster => cluster.name === name) || null;
 };
 
 // Use Node.js native https module to make requests without certificate validation
@@ -270,55 +338,7 @@ const fetchWithoutCertValidation = async (urlString: string, options: any = {}):
     // Send the request
     req.end();
   });
-};
-
-// Get the kubeconfig file path
-const getKubeconfigPath = (): string => {
-  const kubeconfigEnv = process.env.KUBECONFIG;
-  if (kubeconfigEnv) {
-    return kubeconfigEnv;
-  }
-  return path.join(os.homedir(), '.kube', 'config');
-};
-
-// Load kubeconfig
-export const loadKubeConfig = (): k8s.KubeConfig => {
-  const kc = new k8s.KubeConfig();
-  try {
-    const kubeconfigPath = getKubeconfigPath();
-    if (fs.existsSync(kubeconfigPath)) {
-      kc.loadFromFile(kubeconfigPath);
-    } else {
-      kc.loadFromDefault();
-    }
-  } catch (error) {
-    console.error('Error loading kubeconfig:', error);
-    kc.loadFromDefault();
-  }
-  return kc;
-};
-
-// Get available clusters
-export const getClusters = (): Cluster[] => {
-  const kc = loadKubeConfig();
-  const displayNames = getClusterDisplayNames();
-  
-  return kc.getContexts().map(context => {
-    const cluster = kc.getCluster(context.cluster);
-    return {
-      name: context.name,
-      context: context.cluster,
-      server: cluster?.server || 'Unknown',
-      displayName: displayNames[context.name] || ''
-    };
-  });
-};
-
-// Get a cluster by name
-export const getClusterByName = (name: string): Cluster | null => {
-  const clusters = getClusters();
-  return clusters.find(cluster => cluster.name === name) || null;
-};
+}; 
 
 // Get a client for a specific cluster
 export const getClientForCluster = (clusterName: string): {
@@ -327,16 +347,34 @@ export const getClientForCluster = (clusterName: string): {
   appsClient: k8s.AppsV1Api;
 } => {
   const kc = loadKubeConfig();
-  
-  try {
-    // Set the current context to the specified cluster
-    kc.setCurrentContext(clusterName);
-  } catch (error) {
-    console.error(`Failed to set context to ${clusterName}:`, error);
-    // Continue with the current context as a fallback
-    console.log('Continuing with current context');
+  const availableContexts = kc.getContexts().map(c => c.name);
+  const currentContextFromLoad = kc.getCurrentContext(); // Context name loaded from file/env
+
+  console.log(`[GetClient Debug] Requested clusterName: "${clusterName}"`);
+  console.log(`[GetClient Debug] Context loaded by default: "${currentContextFromLoad}"`);
+  console.log(`[GetClient Debug] Available contexts: ${JSON.stringify(availableContexts)}`);
+
+  // Check if the requested clusterName is a valid context
+  if (availableContexts.includes(clusterName)) {
+    // If the requested name is valid, try to set it
+    try {
+      console.log(`[GetClient Debug] Setting current context to requested name: "${clusterName}"`);
+      kc.setCurrentContext(clusterName);
+    } catch (error) {
+      // Log error but proceed, relying on the originally loaded context
+      console.error(`[GetClient Debug] Failed to set context to "${clusterName}", proceeding with default "${currentContextFromLoad}":`, error);
+      // Explicitly set back to the originally loaded context just in case setCurrentContext cleared it
+      kc.setCurrentContext(currentContextFromLoad);
+    }
+  } else {
+    // If the requested name is NOT valid, log a warning and use the default context
+    console.warn(`[GetClient Debug] Requested clusterName "${clusterName}" not found in available contexts. Using default context: "${currentContextFromLoad}"`);
+    // Ensure the originally loaded context is set (it should be already, but this is safe)
+    kc.setCurrentContext(currentContextFromLoad);
   }
-  
+
+  console.log(`[GetClient Debug] Final context being used for API clients: "${kc.getCurrentContext()}"`);
+
   // Create the API clients
   const coreClient = kc.makeApiClient(k8s.CoreV1Api);
   let metricsClient;
@@ -375,26 +413,6 @@ export const getClientForCluster = (clusterName: string): {
           return { body: data };
         } catch (err) {
           console.error('Error fetching node metrics directly:', err);
-          
-          // Provide more detailed error logging
-          if (err instanceof Error) {
-            // Log the error details
-            console.error('Error details:', {
-              message: err.message,
-              stack: err.stack,
-              cause: err.cause ? (err.cause as Error).message : 'No cause',
-              code: (err as any).code
-            });
-            
-            // Log a more user-friendly message
-            if ((err as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
-              console.error('This appears to be an SSL certificate verification issue. Using insecure connections to bypass.');
-            } else if ((err as any).code === 'ECONNREFUSED') {
-              console.error('Connection refused. Make sure the Kubernetes API server is accessible.');
-            }
-          }
-          
-          // Continue with empty metrics
           return { body: { items: [] } };
         }
       },
@@ -421,26 +439,6 @@ export const getClientForCluster = (clusterName: string): {
           return { body: data };
         } catch (err) {
           console.error('Error fetching pod metrics directly:', err);
-          
-          // Provide more detailed error logging
-          if (err instanceof Error) {
-            // Log the error details
-            console.error('Error details:', {
-              message: err.message,
-              stack: err.stack,
-              cause: err.cause ? (err.cause as Error).message : 'No cause',
-              code: (err as any).code
-            });
-            
-            // Log a more user-friendly message
-            if ((err as any).code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
-              console.error('This appears to be an SSL certificate verification issue. Using insecure connections to bypass.');
-            } else if ((err as any).code === 'ECONNREFUSED') {
-              console.error('Connection refused. Make sure the Kubernetes API server is accessible.');
-            }
-          }
-          
-          // Continue with empty metrics
           return { body: { items: [] } };
         }
       }
@@ -527,25 +525,15 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
         let cpuUsage = metrics?.usage?.cpu || '0';
         let memoryUsage = metrics?.usage?.memory || '0';
         
-        // Log raw values for debugging
-        console.log(`Node ${node.metadata?.name} raw memory values: capacity=${memoryCapacity}, usage=${memoryUsage}`);
-        
         // Parse CPU and memory values to get normalized numeric values
-        // IMPORTANT: For memory, use allocatable rather than capacity, which is more accurate
-        // for what's actually available to pods
         const parsedCpuCapacity = parseCpuValue(cpuCapacity);
         const parsedCpuUsage = parseCpuValue(cpuUsage);
         const parsedMemCapacity = parseMemoryValue(memoryAllocatable); // Use allocatable instead of capacity
         const parsedMemUsage = parseMemoryValue(memoryUsage);
         
-        console.log(`Node ${node.metadata?.name} parsed memory: allocatable=${parsedMemCapacity}, usage=${parsedMemUsage}`);
-        
         // Ensure usage doesn't exceed capacity
         const validatedCpuUsage = Math.min(parseFloat(parsedCpuUsage), parseFloat(parsedCpuCapacity)).toString();
         const validatedMemUsage = Math.min(parseFloat(parsedMemUsage), parseFloat(parsedMemCapacity)).toString();
-        
-        // Log validated values
-        console.log(`Node ${node.metadata?.name} validated memory usage: ${validatedMemUsage} (${(parseFloat(validatedMemUsage) / parseFloat(parsedMemCapacity) * 100).toFixed(2)}%)`);
         
         // Parse instance type from labels
         const instanceType = node.metadata?.labels?.['node.kubernetes.io/instance-type'] ||
@@ -664,18 +652,11 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         const validatedCpuUsage = Math.min(cpuUsage, cpuCapacity);
         
         // Get memory values directly from the node's allocatable & capacity field
-        // For true capacity, use the capacity field rather than allocatable
-        // which can be less due to system reservations
         const memCapacityBytes = parseFloat(parseMemoryValue(node.capacity.memory));
-        // Convert to Gi for easier debugging
-        const memCapacityGi = memCapacityBytes / (1024 * 1024 * 1024);
         
         // Get memory usage
         const memUsageBytes = parseFloat(parseMemoryValue(node.usage.memory));
         const validatedMemUsage = Math.min(memUsageBytes, memCapacityBytes);
-        
-        console.log(`Node ${node.name} (${node.instanceType}): Memory Capacity=${formatMemoryForDisplay(node.capacity.memory)} (${memCapacityGi.toFixed(2)}Gi)`);
-        console.log(`Allocatable: ${node.allocatable.memory}, Usage: ${node.usage.memory}`);
         
         // Add values to node group totals
         nodeGroup.totalCpu = (parseFloat(nodeGroup.totalCpu) + cpuCapacity).toString();
@@ -683,18 +664,12 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         nodeGroup.totalMemory = (parseFloat(nodeGroup.totalMemory) + memCapacityBytes).toString();
         nodeGroup.usedMemory = (parseFloat(nodeGroup.usedMemory) + validatedMemUsage).toString();
         
-        // Log updated group totals
-        const groupTotalGi = parseFloat(nodeGroup.totalMemory) / (1024 * 1024 * 1024);
-        console.log(`NodeGroup ${nodeGroupName} now has ${nodeGroup.nodes.length} nodes, ${groupTotalGi.toFixed(2)}Gi total memory`);
-        
       } catch (error) {
         console.error(`Error calculating node metrics for ${node.name}:`, error);
       }
       
       nodeGroup.podsCount += node.pods;
     });
-    
-    console.log("=== FORMATTING NODE GROUP VALUES ===");
     
     // Convert map to array and format values
     const formattedNodeGroups = Array.from(nodeGroups.values()).map(nodeGroup => {
@@ -717,8 +692,6 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         const totalMemoryGi = totalMemory / (1024 * 1024 * 1024);
         // Ensure we don't show partial gigabytes for node groups
         const totalMemoryDisplay = `${Math.round(totalMemoryGi)}Gi`;
-        
-        console.log(`NodeGroup ${nodeGroup.name}: ${nodeGroup.nodes.length} nodes, CPU=${formattedUsedCpu}/${formattedTotalCpu}, Memory=${totalMemoryDisplay}`);
         
         // Return the formatted node group data
         return {
@@ -747,11 +720,6 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
           memPercentage: 0
         };
       }
-    });
-    
-    console.log("=== COMPLETED NODE GROUP CALCULATION ===");
-    formattedNodeGroups.forEach(ng => {
-      console.log(`NodeGroup ${ng.name}: CPU=${ng.usedCpu}/${ng.totalCpu} (${ng.cpuPercentage}%), Memory=${ng.totalMemory} (${ng.memPercentage}%)`);
     });
     
     return formattedNodeGroups;
@@ -925,19 +893,54 @@ export const getPodLogs = async (
   containerName?: string,
   tailLines?: number
 ): Promise<{ success: boolean; logs?: string; message?: string }> => {
+  console.log(`kubernetes-server: Getting logs for pod ${namespace}/${podName} in cluster ${clusterName}`, 
+    { containerName, tailLines });
+  
   try {
+    if (!clusterName || !namespace || !podName) {
+      console.error('Missing required parameters:', { clusterName, namespace, podName });
+      return { 
+        success: false, 
+        message: `Missing required parameters: ${!clusterName ? 'cluster' : ''} ${!namespace ? 'namespace' : ''} ${!podName ? 'podName' : ''}`.trim()
+      };
+    }
+    
     const { coreClient } = getClientForCluster(clusterName);
     
     // If container name is not provided, get all container logs
     if (!containerName) {
       // First get the pod to find all containers
-      const { body: pod } = await coreClient.readNamespacedPod(podName, namespace);
+      console.log(`kubernetes-server: Fetching pod ${namespace}/${podName} to get container names`);
+      let pod;
+      try {
+        const response = await coreClient.readNamespacedPod(podName, namespace);
+        pod = response.body;
+      } catch (podError) {
+        console.error(`Error fetching pod ${namespace}/${podName}:`, podError);
+        
+        if (podError && typeof podError === 'object' && 'response' in podError && 
+            podError.response && typeof podError.response === 'object' && 
+            'statusCode' in podError.response && podError.response.statusCode === 404) {
+          return { 
+            success: false, 
+            message: `Pod ${namespace}/${podName} not found` 
+          };
+        }
+        throw podError;
+      }
+      
       const containerNames = pod.spec?.containers.map(c => c.name) || [];
+      console.log(`kubernetes-server: Found ${containerNames.length} containers in pod ${namespace}/${podName}`);
+      
+      if (containerNames.length === 0) {
+        return { success: true, logs: 'No containers found in pod' };
+      }
       
       // Get logs for each container
       let allLogs = '';
       for (const container of containerNames) {
         try {
+          console.log(`kubernetes-server: Fetching logs for container ${container}`);
           const { body } = await coreClient.readNamespacedPodLog(
             podName, 
             namespace, 
@@ -948,6 +951,7 @@ export const getPodLogs = async (
           );
           allLogs += `\n--- Container: ${container} ---\n${body}\n`;
         } catch (containerError) {
+          console.error(`Error fetching logs for container ${container}:`, containerError);
           allLogs += `\n--- Container: ${container} ---\nError fetching logs: ${
             containerError instanceof Error ? containerError.message : 'Unknown error'
           }\n`;
@@ -957,6 +961,7 @@ export const getPodLogs = async (
     }
     
     // Get logs for a specific container
+    console.log(`kubernetes-server: Fetching logs for specific container ${containerName}`);
     const { body } = await coreClient.readNamespacedPodLog(
       podName, 
       namespace, 
@@ -969,9 +974,34 @@ export const getPodLogs = async (
     return { success: true, logs: body };
   } catch (error) {
     console.error(`Error getting logs for pod ${namespace}/${podName}:`, error);
+    let errorMessage = 'Unknown error occurred while fetching logs';
+    
+    // Handle specific kubernetes client errors
+    if (error && typeof error === 'object' && 'response' in error && 
+        error.response && typeof error.response === 'object' && 
+        'statusCode' in error.response) {
+      const statusCode = error.response.statusCode;
+      
+      if (statusCode === 404) {
+        errorMessage = `Pod ${namespace}/${podName} not found`;
+      } else if (statusCode === 403) {
+        errorMessage = `Access denied for pod logs ${namespace}/${podName}`;
+      } else {
+        errorMessage = `Kubernetes API error (${statusCode}): ${
+          'body' in error.response && error.response.body && 
+          typeof error.response.body === 'object' && 
+          'message' in error.response.body 
+            ? error.response.body.message 
+            : 'Unknown error'
+        }`;
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
     return { 
       success: false, 
-      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching logs' 
+      message: errorMessage
     };
   }
 };
@@ -982,16 +1012,211 @@ export const getPodDetails = async (
   namespace: string, 
   podName: string
 ): Promise<{ success: boolean; details?: any; message?: string }> => {
+  console.log(`kubernetes-server: Getting details for pod ${namespace}/${podName} in cluster ${clusterName}`);
+  
   try {
+    if (!clusterName || !namespace || !podName) {
+      console.error('Missing required parameters:', { clusterName, namespace, podName });
+      return { 
+        success: false, 
+        message: `Missing required parameters: ${!clusterName ? 'cluster' : ''} ${!namespace ? 'namespace' : ''} ${!podName ? 'podName' : ''}`.trim()
+      };
+    }
+    
     const { coreClient } = getClientForCluster(clusterName);
+    
+    console.log(`kubernetes-server: Calling readNamespacedPod for ${namespace}/${podName}`);
     const { body: pod } = await coreClient.readNamespacedPod(podName, namespace);
+    console.log(`kubernetes-server: Successfully fetched pod details for ${namespace}/${podName}`);
     
     return { success: true, details: pod };
   } catch (error) {
     console.error(`Error getting details for pod ${namespace}/${podName}:`, error);
+    let errorMessage = 'Unknown error occurred while fetching pod details';
+    let statusCode;
+    
+    // Handle specific kubernetes client errors
+    if (error && typeof error === 'object' && 'response' in error && 
+        error.response && typeof error.response === 'object' && 
+        'statusCode' in error.response) {
+      statusCode = error.response.statusCode;
+      
+      if (statusCode === 404) {
+        errorMessage = `Pod ${namespace}/${podName} not found`;
+      } else if (statusCode === 403) {
+        errorMessage = `Access denied for pod ${namespace}/${podName}`;
+      } else {
+        errorMessage = `Kubernetes API error (${statusCode}): ${
+          'body' in error.response && error.response.body && 
+          typeof error.response.body === 'object' && 
+          'message' in error.response.body 
+            ? error.response.body.message 
+            : 'Unknown error'
+        }`;
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
     return { 
       success: false, 
-      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching pod details' 
+      message: errorMessage
     };
   }
-}; 
+};
+
+// Get pod details using kubectl command (fallback method)
+export const getPodDetailsUsingKubectl = async (
+  clusterName: string, 
+  namespace: string, 
+  podName: string
+): Promise<{ success: boolean; details?: any; message?: string; rawOutput?: string }> => {
+  try {
+    // Set kubectl context to the specified cluster
+    const kc = loadKubeConfig();
+    try {
+      kc.setCurrentContext(clusterName);
+    } catch (error) {
+      console.error(`Failed to set context to ${clusterName}:`, error);
+      // Continue with the current context as a fallback
+    }
+
+    // Use child_process to run the kubectl command
+    const { exec } = require('child_process');
+    
+    return new Promise((resolve) => {
+      exec(`kubectl describe pod ${podName} -n ${namespace}`, (error: any, stdout: string, stderr: string) => {
+        if (error) {
+          console.error(`Error executing kubectl describe pod: ${error.message}`);
+          resolve({ 
+            success: false, 
+            message: `Failed to get pod details using kubectl: ${error.message}`
+          });
+          return;
+        }
+        
+        if (stderr) {
+          console.error(`kubectl stderr: ${stderr}`);
+          resolve({ 
+            success: false, 
+            message: `kubectl error: ${stderr}`
+          });
+          return;
+        }
+        
+        // Parse the kubectl output into a structured format
+        const details = parseKubectlDescribeOutput(stdout);
+        
+        resolve({ 
+          success: true, 
+          details,
+          rawOutput: stdout // Include the raw output for display
+        });
+      });
+    });
+  } catch (error) {
+    console.error(`Error getting pod details for ${namespace}/${podName} using kubectl:`, error);
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching pod details'
+    };
+  }
+};
+
+// Helper function to parse kubectl describe pod output
+function parseKubectlDescribeOutput(output: string): any {
+  const details: any = {
+    metadata: {
+      name: '',
+      namespace: '',
+      labels: {},
+      annotations: {}
+    },
+    spec: {
+      containers: []
+    },
+    status: {
+      phase: '',
+      containerStatuses: []
+    },
+    rawOutput: output
+  };
+  
+  // Extract basic metadata
+  const nameMatch = output.match(/Name:\s+(.+)$/m);
+  if (nameMatch) details.metadata.name = nameMatch[1].trim();
+  
+  const namespaceMatch = output.match(/Namespace:\s+(.+)$/m);
+  if (namespaceMatch) details.metadata.namespace = namespaceMatch[1].trim();
+  
+  const statusMatch = output.match(/Status:\s+(.+)$/m);
+  if (statusMatch) details.status.phase = statusMatch[1].trim();
+  
+  // Extract labels
+  const labelsSection = output.match(/Labels:\s+([\s\S]+?)(?=Annotations:|Status:|$)/m);
+  if (labelsSection) {
+    const labelLines = labelsSection[1].trim().split('\n');
+    labelLines.forEach(line => {
+      const [key, value] = line.trim().split('=');
+      if (key && value) {
+        details.metadata.labels[key.trim()] = value.trim();
+      }
+    });
+  }
+  
+  // Extract annotations
+  const annotationsSection = output.match(/Annotations:\s+([\s\S]+?)(?=Status:|$)/m);
+  if (annotationsSection) {
+    const annotationLines = annotationsSection[1].trim().split('\n');
+    annotationLines.forEach(line => {
+      const parts = line.trim().split(':');
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        const value = parts.slice(1).join(':').trim();
+        details.metadata.annotations[key] = value;
+      }
+    });
+  }
+  
+  // Extract container info
+  const containerSections = output.match(/Containers:([\s\S]+?)(?=Conditions:|Events:|$)/);
+  if (containerSections) {
+    const containersList = containerSections[1].split(/Container ID:/g);
+    
+    // Skip the first empty item if it exists
+    for (let i = 1; i < containersList.length; i++) {
+      const containerInfo = containersList[i];
+      const container: any = {
+        name: '',
+        state: 'unknown',
+        ready: false,
+        restartCount: 0,
+        image: ''
+      };
+      
+      // Extract container name
+      const nameMatch = containerInfo.match(/^.*?\n\s+Name:\s+(.+)$/m);
+      if (nameMatch) container.name = nameMatch[1].trim();
+      
+      // Extract container image
+      const imageMatch = containerInfo.match(/Image:\s+(.+)$/m);
+      if (imageMatch) container.image = imageMatch[1].trim();
+      
+      // Extract container state
+      const stateMatch = containerInfo.match(/State:\s+(.+)$/m);
+      if (stateMatch) container.state = stateMatch[1].trim();
+      
+      // Extract ready state
+      const readyMatch = containerInfo.match(/Ready:\s+(.+)$/m);
+      if (readyMatch) container.ready = readyMatch[1].trim() === 'true';
+      
+      // Extract restart count
+      const restartMatch = containerInfo.match(/Restart Count:\s+(\d+)$/m);
+      if (restartMatch) container.restartCount = parseInt(restartMatch[1].trim(), 10);
+      
+      details.status.containerStatuses.push(container);
+    }
+  }
+  
+  return details;
+} 
