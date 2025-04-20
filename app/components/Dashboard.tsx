@@ -7,8 +7,12 @@ import ClusterDetails from './ClusterDetails';
 import { Cluster } from '../types/kubernetes';
 import { getClusterDisplayNames } from '../lib/kubernetes-client';
 import { useTheme } from '../lib/ThemeProvider';
+import { DEFAULT_CONTEXT_NAME } from '../lib/constants';
 
 export default function Dashboard() {
+  // Add a log to confirm component rendering
+  console.log('[Dashboard] Component rendering...');
+
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [selectedCluster, setSelectedCluster] = useState<Cluster | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,27 +23,80 @@ export default function Dashboard() {
     const fetchClusters = async () => {
       try {
         setLoading(true);
+        setSelectedCluster(null);
+        setError(null);
+        console.log('[Dashboard] Fetching clusters...');
+
         const res = await fetch('/api/clusters');
         if (!res.ok) {
-          throw new Error('Failed to fetch clusters');
+          let errorMessage = `Failed to fetch clusters (${res.status})`;
+          try {
+            const errorData = await res.json();
+            if (errorData.error) errorMessage = errorData.error;
+          } catch (e) { 
+            console.error('[Dashboard] Error parsing error response:', e);
+          }
+          throw new Error(errorMessage);
         }
         
         const data = await res.json();
+        console.log('[Dashboard] Raw API response:', data);
+        
+        if (!Array.isArray(data)) {
+          throw new Error(`Invalid response data format: expected array, got ${typeof data}`);
+        }
+        
+        if (data.length === 0) {
+          console.log('[Dashboard] No clusters found in the API response');
+          
+          // Create a default placeholder cluster if none were found
+          const defaultCluster: Cluster = {
+            name: DEFAULT_CONTEXT_NAME,
+            context: DEFAULT_CONTEXT_NAME,
+            server: 'Current active context',
+            displayName: 'Current Cluster',
+            isActive: true
+          };
+          
+          setClusters([defaultCluster]);
+          setSelectedCluster(defaultCluster);
+          setLoading(false);
+          return;
+        }
         
         // Apply display names from localStorage
         const displayNames = getClusterDisplayNames();
-        const clustersWithDisplayNames = data.map((cluster: Cluster) => ({
-          ...cluster,
-          displayName: displayNames[cluster.name] || ''
-        }));
+        console.log('[Dashboard] Display names from storage:', displayNames);
         
+        const clustersWithDisplayNames = data.map((cluster: Cluster & { isActive?: boolean }) => {
+          const clusterWithDisplayName = {
+            ...cluster,
+            displayName: displayNames[cluster.name] || ''
+          };
+          console.log(`[Dashboard] Processed cluster: name=${cluster.name}, display=${clusterWithDisplayName.displayName}, server=${cluster.server}`);
+          return clusterWithDisplayName;
+        });
+
+        console.log('[Dashboard] Fetched clusters:', clustersWithDisplayNames);
+
         setClusters(clustersWithDisplayNames);
         
-        // Select the first cluster by default if available
-        if (clustersWithDisplayNames.length > 0) {
+        // Find and select the active cluster if available
+        const activeCluster = clustersWithDisplayNames.find((c: Cluster & { isActive?: boolean }) => c.isActive === true);
+        
+        if (activeCluster) {
+          console.log('[Dashboard] Selecting active cluster:', activeCluster);
+          setSelectedCluster(activeCluster);
+        } else if (clustersWithDisplayNames.length > 0) {
+          // If no active cluster found, select the first one
+          console.log('[Dashboard] No active cluster found, selecting first cluster:', clustersWithDisplayNames[0]);
           setSelectedCluster(clustersWithDisplayNames[0]);
+        } else {
+          console.log('[Dashboard] No clusters found, setting selectedCluster to null');
+          setSelectedCluster(null);
         }
       } catch (err: any) {
+        console.error('[Dashboard] Error fetching clusters:', err);
         setError(err.message || 'Failed to fetch clusters');
       } finally {
         setLoading(false);

@@ -172,25 +172,88 @@ const formatNodeGroupMemory = (memStr: string): string => {
 // Get the kubeconfig file path
 const getKubeconfigPath = (): string => {
   const kubeconfigEnv = process.env.KUBECONFIG;
+  const homeDir = os.homedir();
+  console.log(`[KubeConfig Debug] KUBECONFIG env: ${kubeconfigEnv}`);
+  console.log(`[KubeConfig Debug] Home directory: ${homeDir}`);
+  console.log(`[KubeConfig Debug] Current working directory: ${process.cwd()}`);
+
+  // Check if KUBECONFIG environment variable is set
   if (kubeconfigEnv) {
+    console.log(`[KubeConfig Debug] Using KUBECONFIG env var: ${kubeconfigEnv}`);
     return kubeconfigEnv;
   }
-  return path.join(os.homedir(), '.kube', 'config');
+
+  // Check for common kubeconfig locations
+  const possiblePaths = [
+    path.join(homeDir, '.kube', 'config'),      // Standard path
+    '/root/.kube/config',                        // Docker container path
+    '/tmp/.kube/config',                         // Alternative container path
+    path.join(process.cwd(), '.kube', 'config')  // Relative to CWD
+  ];
+
+  // Find first existing path
+  for (const configPath of possiblePaths) {
+    if (fs.existsSync(configPath)) {
+      console.log(`[KubeConfig Debug] Found kubeconfig at: ${configPath}`);
+      return configPath;
+    }
+  }
+
+  // Default fallback
+  const defaultPath = path.join(homeDir, '.kube', 'config');
+  console.log(`[KubeConfig Debug] Using default path: ${defaultPath}`);
+  return defaultPath;
 };
 
 // Load kubeconfig
 export const loadKubeConfig = (): k8s.KubeConfig => {
   const kc = new k8s.KubeConfig();
+  const kubeconfigPath = getKubeconfigPath();
+  console.log(`[KubeConfig Debug] Attempting to load config from: ${kubeconfigPath}`);
+  console.log(`[KubeConfig Debug] Relevant Env Vars: KUBECONFIG=${process.env.KUBECONFIG}, HOME=${process.env.HOME}, USER=${process.env.USER}, AWS_PROFILE=${process.env.AWS_PROFILE}, AWS_REGION=${process.env.AWS_REGION}`);
+
   try {
-    const kubeconfigPath = getKubeconfigPath();
-    if (fs.existsSync(kubeconfigPath)) {
-      kc.loadFromFile(kubeconfigPath);
+    const exists = fs.existsSync(kubeconfigPath);
+    console.log(`[KubeConfig Debug] Does kubeconfig file exist at '${kubeconfigPath}'? ${exists}`);
+
+    if (exists) {
+      try {
+        console.log(`[KubeConfig Debug] Loading config using kc.loadFromFile('${kubeconfigPath}')...`);
+        const fileContents = fs.readFileSync(kubeconfigPath, 'utf8');
+        console.log(`[KubeConfig Debug] Read ${fileContents.length} bytes from config file`);
+        
+        kc.loadFromFile(kubeconfigPath);
+        
+        console.log(`[KubeConfig Debug] Successfully loaded config from file.`);
+        console.log(`[KubeConfig Debug] Current context: ${kc.getCurrentContext()}`);
+        console.log(`[KubeConfig Debug] Available contexts: ${kc.getContexts().map(c => c.name).join(', ')}`);
+        
+        // If we have no contexts, try loadFromDefault as fallback
+        if (kc.getContexts().length === 0) {
+          console.log(`[KubeConfig Debug] No contexts found in file, trying loadFromDefault as fallback`);
+          kc.loadFromDefault();
+        }
+      } catch (loadError: any) {
+        console.error(`[KubeConfig Debug] Error during kc.loadFromFile('${kubeconfigPath}'):`, loadError);
+        console.error(`[KubeConfig Debug] Error details: Name=${loadError.name}, Message=${loadError.message}, Stack=${loadError.stack}`);
+        // Fallback to default to see if that works (it likely won't, but preserves original logic)
+        console.log('[KubeConfig Debug] Falling back to kc.loadFromDefault() due to loadFromFile error...');
+        kc.loadFromDefault();
+      }
     } else {
+      console.log(`[KubeConfig Debug] Kubeconfig file not found at '${kubeconfigPath}', trying kc.loadFromDefault()...`);
       kc.loadFromDefault();
+      console.log('[KubeConfig Debug] Loaded default config.');
     }
-  } catch (error) {
-    console.error('Error loading kubeconfig:', error);
-    kc.loadFromDefault();
+  } catch (error: any) {
+    // Catch errors from existsSync or loadFromDefault
+    console.error(`[KubeConfig Debug] General error loading kubeconfig (path: ${kubeconfigPath}):`, error);
+    console.error(`[KubeConfig Debug] General error details: Name=${error.name}, Message=${error.message}, Stack=${error.stack}`);
+    // Attempt default loading as a last resort if not already tried
+    if (!fs.existsSync(kubeconfigPath)) {
+       console.log('[KubeConfig Debug] Retrying kc.loadFromDefault() after general error...');
+       kc.loadFromDefault();
+    }
   }
   return kc;
 };
@@ -284,16 +347,34 @@ export const getClientForCluster = (clusterName: string): {
   appsClient: k8s.AppsV1Api;
 } => {
   const kc = loadKubeConfig();
-  
-  try {
-    // Set the current context to the specified cluster
-    kc.setCurrentContext(clusterName);
-  } catch (error) {
-    console.error(`Failed to set context to ${clusterName}:`, error);
-    // Continue with the current context as a fallback
-    console.log('Continuing with current context');
+  const availableContexts = kc.getContexts().map(c => c.name);
+  const currentContextFromLoad = kc.getCurrentContext(); // Context name loaded from file/env
+
+  console.log(`[GetClient Debug] Requested clusterName: "${clusterName}"`);
+  console.log(`[GetClient Debug] Context loaded by default: "${currentContextFromLoad}"`);
+  console.log(`[GetClient Debug] Available contexts: ${JSON.stringify(availableContexts)}`);
+
+  // Check if the requested clusterName is a valid context
+  if (availableContexts.includes(clusterName)) {
+    // If the requested name is valid, try to set it
+    try {
+      console.log(`[GetClient Debug] Setting current context to requested name: "${clusterName}"`);
+      kc.setCurrentContext(clusterName);
+    } catch (error) {
+      // Log error but proceed, relying on the originally loaded context
+      console.error(`[GetClient Debug] Failed to set context to "${clusterName}", proceeding with default "${currentContextFromLoad}":`, error);
+      // Explicitly set back to the originally loaded context just in case setCurrentContext cleared it
+      kc.setCurrentContext(currentContextFromLoad);
+    }
+  } else {
+    // If the requested name is NOT valid, log a warning and use the default context
+    console.warn(`[GetClient Debug] Requested clusterName "${clusterName}" not found in available contexts. Using default context: "${currentContextFromLoad}"`);
+    // Ensure the originally loaded context is set (it should be already, but this is safe)
+    kc.setCurrentContext(currentContextFromLoad);
   }
-  
+
+  console.log(`[GetClient Debug] Final context being used for API clients: "${kc.getCurrentContext()}"`);
+
   // Create the API clients
   const coreClient = kc.makeApiClient(k8s.CoreV1Api);
   let metricsClient;

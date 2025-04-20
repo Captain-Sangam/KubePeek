@@ -113,6 +113,19 @@ export default function ClusterList({
     }
   };
 
+  // Format cluster name to be more readable
+  const formatClusterName = (name: string): string => {
+    // Replace underscores and hyphens with spaces
+    let formatted = name.replace(/[_-]/g, ' ');
+    
+    // Capitalize first letter of each word
+    formatted = formatted.replace(/\w\S*/g, (txt) => {
+      return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+    });
+    
+    return formatted;
+  };
+
   return (
     <>
       <Typography 
@@ -173,7 +186,7 @@ export default function ClusterList({
                 }} 
               />
               <ListItemText 
-                primary={cluster.displayName || cluster.name} 
+                primary={cluster.displayName || formatClusterName(cluster.name)} 
                 secondary={cluster.server}
                 primaryTypographyProps={{
                   variant: 'body2',

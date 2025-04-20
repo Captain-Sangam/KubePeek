@@ -35,6 +35,9 @@ interface ClusterDetailsProps {
 }
 
 export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
+  // Log the received cluster prop on each render
+  console.log('[ClusterDetails] Received cluster prop:', cluster);
+
   const [tabValue, setTabValue] = useState(0);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [pods, setPods] = useState<Pod[]>([]);

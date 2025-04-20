@@ -3,6 +3,7 @@ export interface Cluster {
   context: string;
   server: string;
   displayName?: string;
+  isActive?: boolean;
 }
 
 export interface Node {
