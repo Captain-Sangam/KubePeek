@@ -6,6 +6,9 @@
 
 KubePeek is a snazzy web-based Kubernetes monitoring dashboard that connects to your local Kubernetes configuration to give you a bird's-eye view of all your connected clusters. No more squinting at terminal outputs - see your clusters in style!
 
+A lightweight web UI that gives real-time visibility into your EKS node groups.
+While there are other observability tools out there, most skip or under-serve the node group layer. This is a simple V1 focused on that gap — with more features on the way.
+
 ## ✨ Features
 
 - 📁 Effortlessly reads from your local Kubernetes configuration files
@@ -72,6 +75,8 @@ docker run -d -p 3000:3000 \
 Then visit http://localhost:3000 in your browser.
 
 For more Docker deployment options, see [DOCKERHUB.md](DOCKERHUB.md).
+
+DockerHub repository: [https://hub.docker.com/r/ajsangamithran/kubepeek](https://hub.docker.com/r/ajsangamithran/kubepeek)
 
 ## Usage
 
