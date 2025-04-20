@@ -33,6 +33,8 @@ KubePeek is a snazzy web-based Kubernetes monitoring dashboard that connects to 
 
 ### Installation
 
+#### Option 1: Local Development
+
 1. Clone the repository
 ```bash
 git clone https://github.com/yourusername/kubepeek.git
@@ -54,6 +56,22 @@ yarn dev
 ```
 
 4. Open your browser and navigate to [http://localhost:3000](http://localhost:3000)
+
+#### Option 2: Docker Deployment
+
+Quick start with Docker:
+
+```bash
+docker run -d -p 3000:3000 \
+ -v $HOME/.kube:/root/.kube \
+ -v $HOME/.aws:/root/.aws \
+ -e KUBECONFIG=/root/.kube/config \
+ --name kubepeek ajsangamithran/kubepeek:latest
+```
+
+Then visit http://localhost:3000 in your browser.
+
+For more Docker deployment options, see [DOCKERHUB.md](DOCKERHUB.md).
 
 ## Usage
 
