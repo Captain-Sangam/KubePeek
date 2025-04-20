@@ -25,3 +25,5 @@ EXPOSE 3000
 
 # Start the development server
 CMD ["npm", "run", "dev"]
+
+# There are some issue with build process, so we are using dev mode for now
