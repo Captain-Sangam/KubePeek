@@ -9,6 +9,8 @@ KubePeek is a snazzy web-based Kubernetes monitoring dashboard that connects to 
 A lightweight web UI that gives real-time visibility into your EKS node groups.
 While there are other observability tools out there, most skip or under-serve the node group layer. This is a simple V1 focused on that gap — with more features on the way.
 
+<img src="assets/showcase.png" alt="KubePeek Showcase" width="100%"/>
+
 ## ✨ Features
 
 - 📁 Effortlessly reads from your local Kubernetes configuration files
