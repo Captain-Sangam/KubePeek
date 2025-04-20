@@ -5,27 +5,17 @@ WORKDIR /app
 # Install required system dependencies
 RUN apk add --no-cache curl python3 bash aws-cli kubectl
 
-# Copy package.json and install dependencies
+# Copy package files and install dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 # Copy the application code
 COPY . .
 
-# Build the project
-RUN npm run build
-
-# Prepare for production
-ENV NODE_ENV production
+# Set environment variables
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 ENV KUBECONFIG /root/.kube/config
-
-# Verify tools are available
-RUN which aws && which kubectl
-
-# Create the start script
-RUN chmod +x start.sh
 
 # Create necessary directories
 RUN mkdir -p /root/.kube /root/.aws
@@ -33,5 +23,5 @@ RUN mkdir -p /root/.kube /root/.aws
 # Expose the application port
 EXPOSE 3000
 
-# Start the application
-CMD ["./start.sh"]
+# Start the development server
+CMD ["npm", "run", "dev"]
