@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPods } from '../../../../lib/kubernetes-server';
+import { getPods, isAuthError } from '../../../../lib/kubernetes-server';
 import { getDefaultContext, getDefaultContextName } from '../../../../lib/default-context';
 
 export async function GET(
@@ -31,12 +31,24 @@ export async function GET(
     cluster = actualContext;
   }
   
+  // Exactly one scope is allowed: namespace, node, or nodeGroup.
+  const { searchParams } = new URL(request.url);
+  const namespace = searchParams.get('namespace') || undefined;
+  const nodeName = searchParams.get('node') || undefined;
+  const nodeGroup = searchParams.get('nodeGroup') || undefined;
+  if ([namespace, nodeName, nodeGroup].filter(Boolean).length > 1) {
+    return NextResponse.json(
+      { error: 'Provide at most one of namespace, node, or nodeGroup' },
+      { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+    );
+  }
+
   console.log(`API: Getting pods for cluster ${cluster}`);
 
   try {
-    const pods = await getPods(cluster);
+    const pods = await getPods(cluster, { namespace, nodeName, nodeGroup });
     console.log(`API: Successfully retrieved ${pods.length} pods`);
-    
+
     return NextResponse.json(pods, {
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -44,17 +56,18 @@ export async function GET(
     });
   } catch (error: any) {
     console.error(`Error fetching pods for cluster ${cluster}:`, error);
+    const auth = isAuthError(error);
     const errorMessage = error.message || 'Failed to fetch pods';
     console.error(`Returning error: ${errorMessage}`);
-    
+
     return NextResponse.json(
-      { error: errorMessage }, 
-      { 
-        status: 500,
+      { error: auth ? 'auth_expired' : errorMessage },
+      {
+        status: auth ? 401 : 500,
         headers: {
           'Access-Control-Allow-Origin': '*',
         },
       }
     );
   }
-} 
+}

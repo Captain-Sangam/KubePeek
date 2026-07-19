@@ -39,12 +39,14 @@ Prefer a container? See [Running with Docker](docs/development.md#running-with-d
 
 ## Features at a glance
 
+- **Two-part sidebar** — cluster selector on top; a Compute/Workloads nav tree below (collapses to an icon rail)
 - **Node groups** — CPU/RAM usage per node group and per member node, with node start times
-- **Pods** — restart counts, CPU/memory usage bars (% of limits → requests → node allocatable), and filters by namespace, node group, and node
+- **Pods** — scoped by namespace or node (never cluster-wide), restart counts, CPU/memory usage bars (% of limits → requests → node allocatable); delete with confirmation
 - **Pod detail drawer** — status, per-container breakdown, live metrics, events, and logs
 - **Logs** — timestamped, with a JSON fields filter (select which structured fields to show) and previous-container logs for crash loops
-- **Secrets** — list and reveal decoded values on click
-- **Helm** — read-only releases with computed values, manifest, and revision history
+- **Secrets** — scoped by namespace; reveal-all decoded values in a multi-column layout; delete with confirmation
+- **Helm** — read-only releases (scoped by namespace) with computed values, manifest, and revision history
+- **One-click reconnect** — when an EKS/AWS token expires, a Reconnect button restores access without restarting
 
 See [docs/features.md](docs/features.md) for the full list.
 

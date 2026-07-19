@@ -18,15 +18,17 @@ app/lib/helm-server.ts         ← Helm release decoding
 kubeconfig  +  Kubernetes API  +  metrics.k8s.io  +  release Secrets
 ```
 
-- **Routes** are thin: they validate params and delegate to library functions.
-- **`kubernetes-server.ts`** owns kubeconfig loading, per-cluster client creation, and every read: nodes, node groups, pods, pod detail, pod events, pod logs, secrets. Metrics are fetched over a small cert-tolerant HTTPS helper because clusters commonly present self-signed API certs.
+- **Routes** are thin: they validate params, parse scope query params, and delegate to library functions. On an expired-credential error they return **401 `{ error: 'auth_expired' }`** (via the shared `isAuthError` classifier) so the UI can distinguish auth failures from other errors.
+- **`kubernetes-server.ts`** owns kubeconfig loading, per-cluster client creation, and every read: namespaces, nodes, node groups, pods, pod detail, pod events, pod logs, secrets — plus pod and secret **deletes**. Reads that can be large are **scoped server-side**: `getPods` takes a `{ namespace | nodeName | nodeGroup }` scope (node-group resolves to its member nodes and fans out per-node field-selector queries); secrets and Helm take an optional namespace. Metrics are fetched over a small cert-tolerant HTTPS helper because clusters commonly present self-signed API certs.
 - **`helm-server.ts`** lists and decodes Helm releases from their storage secrets (`base64` → `base64` → gzip → JSON). It reuses the cluster client from `kubernetes-server.ts`.
 - Value parsing/formatting helpers (`parseCpuValue`, `parseMemoryValue`, `format*ForDisplay`) normalize Kubernetes quantity strings.
 
 ## Frontend
 
-- `app/components/` holds the UI, grouped by area: `nodes/`, `pods/`, `logs/`, `secrets/`, `helm/`, and `shared/` (reused primitives: `UsageBar`, `TabPanel`, `StatusChip`, `CopyButton`, `PanelState`).
-- `app/hooks/useFetch.ts` is a small fetch hook with request abortion (prevents a slow response from a previously selected cluster overwriting the current one) and lazy enabling (drawers and secondary tabs fetch only when opened).
+- Navigation is a two-part sidebar: `Sidebar` composes `ClusterSelector` (cluster dropdown + rename) and `NavTree` (the data-driven Compute/Workloads groups). `Dashboard` owns the selected cluster and the active view; `ClusterDetails` switches views (no tabs/router — conditional rendering).
+- `app/components/` holds the UI, grouped by area: `nodes/`, `pods/`, `logs/`, `secrets/`, `helm/`, and `shared/` (reused primitives: `UsageBar`, `TabPanel`, `StatusChip`, `CopyButton`, `PanelState`, plus `ScopePicker` — the namespace/node gate shown before scoped views load — and `ReconnectBanner`).
+- `app/hooks/useFetch.ts` is a small fetch hook with request abortion (prevents a slow response from a previously selected cluster overwriting the current one), lazy enabling (pass `null` to disable, so scoped views fetch only once a scope is chosen), and an `authError` flag that drives the Reconnect banner. Changing scope changes the URL, so refetch/abort come for free.
+- Scoped views (Pods, Helm, Secrets) render a `ScopePicker` until a namespace/node is chosen; **Reconnect** simply refetches the enabled queries (which re-runs `aws eks get-token`).
 - `app/lib/format.ts` centralizes numeric parsing, usage-color thresholds, and age formatting. `app/lib/log-parsing.ts` parses log lines and flattens JSON fields for the logs fields filter.
 - State is local component state; there is no global store. The deepest prop chain is two levels.
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listHelmReleases } from '../../../../lib/helm-server';
+import { isAuthError } from '../../../../lib/kubernetes-server';
 
 export async function GET(
   request: NextRequest,
@@ -14,10 +15,16 @@ export async function GET(
       );
     }
 
-    const releases = await listHelmReleases(cluster);
+    const { searchParams } = new URL(request.url);
+    const namespace = searchParams.get('namespace') || undefined;
+
+    const releases = await listHelmReleases(cluster, namespace);
     return NextResponse.json(releases);
   } catch (error) {
     console.error('Error in helm API:', error);
+    if (isAuthError(error)) {
+      return NextResponse.json({ error: 'auth_expired' }, { status: 401 });
+    }
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : 'An error occurred' },
       { status: 500 }

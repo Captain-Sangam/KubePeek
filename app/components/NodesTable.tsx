@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Box, Chip, TableSortLabel,
+  Paper, Box, TableSortLabel,
 } from '@mui/material';
 import { Node, NodeGroupInfo } from '../types/kubernetes';
 import { parseNumericValue } from '../lib/format';
@@ -36,14 +36,14 @@ const headCells: HeadCell[] = [
 interface NodesTableProps {
   nodes: Node[];
   nodeGroups: NodeGroupInfo[];
+  viewMode: 'nodes' | 'nodeGroups';
   onNodeSelect: (nodeName: string) => void;
   onNodeGroupSelect: (nodeGroupName: string) => void;
 }
 
-export default function NodesTable({ nodes, nodeGroups, onNodeSelect, onNodeGroupSelect }: NodesTableProps) {
+export default function NodesTable({ nodes, nodeGroups, viewMode, onNodeSelect, onNodeGroupSelect }: NodesTableProps) {
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<HeadCell['id']>('name');
-  const [viewMode, setViewMode] = useState<'nodes' | 'nodeGroups'>('nodeGroups');
 
   const handleRequestSort = (property: HeadCell['id']) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -84,23 +84,6 @@ export default function NodesTable({ nodes, nodeGroups, onNodeSelect, onNodeGrou
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip
-            label="Node Groups"
-            color={viewMode === 'nodeGroups' ? 'primary' : 'default'}
-            onClick={() => setViewMode('nodeGroups')}
-            size="small"
-          />
-          <Chip
-            label="Individual Nodes"
-            color={viewMode === 'nodes' ? 'primary' : 'default'}
-            onClick={() => setViewMode('nodes')}
-            size="small"
-          />
-        </Box>
-      </Box>
-
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 200px)' }}>
         <Table stickyHeader size="small" sx={{ minWidth: 650, tableLayout: 'fixed' }}>
           <TableHead>

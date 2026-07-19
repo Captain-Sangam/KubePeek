@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Paper, Alert, Typography } from '@mui/material';
-import ClusterList from './ClusterList';
+import Sidebar from './Sidebar';
 import ClusterDetails from './ClusterDetails';
-import { Cluster } from '../types/kubernetes';
+import { Cluster, ActiveView } from '../types/kubernetes';
 import {
   getClusterDisplayNames,
   getSidebarCollapsed,
@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const [activeView, setActiveView] = useState<ActiveView>('nodeGroups');
   const { mode } = useTheme();
 
   // Read collapse preference after mount to avoid a hydration mismatch.
@@ -148,13 +149,15 @@ export default function Dashboard() {
                 : 'rgba(255, 255, 255, 0.06)',
             }}
           >
-            <ClusterList
+            <Sidebar
               clusters={clusters}
               selectedCluster={selectedCluster}
               onSelectCluster={handleClusterSelect}
               loading={loading}
               collapsed={collapsed}
               onToggleCollapse={handleToggleCollapse}
+              activeView={activeView}
+              onNavigate={setActiveView}
             />
           </Paper>
         </Box>
@@ -172,7 +175,11 @@ export default function Dashboard() {
             }}
           >
             {selectedCluster ? (
-              <ClusterDetails cluster={selectedCluster} />
+              <ClusterDetails
+                cluster={selectedCluster}
+                activeView={activeView}
+                onNavigate={setActiveView}
+              />
             ) : (
               <Box
                 sx={{

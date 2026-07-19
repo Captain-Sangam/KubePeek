@@ -1,24 +1,31 @@
 # Features
 
-## Clusters
+## Clusters & navigation
 
 - Reads every context from your kubeconfig (`$KUBECONFIG` → `~/.kube/config` → common fallbacks).
-- Left sidebar lists clusters; rename any cluster to a friendly display name (stored locally).
-- The sidebar **collapses to an icon rail** (cluster initials with tooltips) to reclaim screen space. The collapsed state is remembered across launches.
+- The left sidebar has two parts: a **compact cluster selector** at the top (a dropdown of all clusters; the active one is shown with its server URL) and a **navigation tree** below, grouped into **Compute** (Node Groups, Nodes) and **Workloads** (Pods, Helm, Secrets). Selecting an item shows that resource in the main area.
+- Rename any cluster to a friendly display name (stored locally) from the selector's menu.
+- The sidebar **collapses to an icon rail** (cluster avatar + nav icons with tooltips) to reclaim screen space. The collapsed state is remembered across launches.
+
+### Reconnecting after a token expires
+
+EKS/AWS exec credentials are short-lived (often ~1 hour). When a request fails because the credential has expired, KubePeek shows a **Reconnect** banner (rather than a generic error) with a one-click button; there's also a reconnect button beside the cluster header. Refresh your AWS SSO/VPN session externally, then click Reconnect — no need to disconnect or restart the app.
 
 ## Node groups
 
 - Groups nodes by managed-Kubernetes conventions: EKS (`eks.amazonaws.com/nodegroup`), kOps (`kops.k8s.io/instancegroup`), GKE (`cloud.google.com/gke-nodepool`), AKS (`agentpool`).
 - Per node group: total CPU/memory, aggregate usage bars, and pod count.
 - **Expand a node group** to see its member nodes, each with its own CPU and RAM usage bars and **when it was started** (relative age with a full-timestamp tooltip).
-- Toggle to an "Individual Nodes" view with per-node utilization and start times.
+- The **Nodes** sidebar item gives an "Individual Nodes" view with per-node utilization and start times.
 
 ## Pods
 
+- **Scoped loading** — pods are never loaded cluster-wide. Opening Pods first asks you to pick a **namespace** or a **node**; only then are the matching pods fetched (server-side, so large clusters stay fast). Clicking a node or node group in the Compute views lands here pre-scoped to that node/node group.
+- Change the scope from the toolbar (namespace/node dropdown, or the node-group chip), or use **Change** to pick a different scope.
 - Columns: name, namespace, status, **restart count**, CPU and memory **usage bars**, node, age.
 - Usage bars show consumption as a percentage of the applicable denominator, following a **limits → requests → node allocatable** fallback. The tooltip states which denominator was used.
 - Restart counts are color-coded (amber when > 0, red when high).
-- **Filter** by namespace, node group, and node. Clicking a node or node group in the Nodes tab pre-populates these filters.
+- A **search** box filters the loaded pods by name, namespace, status, chart, or node.
 - Sorting handles mixed units correctly (e.g. `900Mi` sorts below `1.2Gi`).
 
 ## Pod detail
@@ -29,7 +36,7 @@ Clicking a pod opens a right-side drawer with three tabs:
 - **Events** — the pod's events (type, reason, message, count, age) newest-first, with a refresh button.
 - **Logs** — see below.
 
-A **delete** action (with confirmation) is available in the drawer header.
+A **delete** action (with confirmation) is available in the drawer header; on success the pod list refreshes.
 
 ## Logs
 
@@ -41,8 +48,10 @@ A **delete** action (with confirmation) is available in the drawer header.
 
 ## Secrets
 
-- Lists secrets across namespaces (name, namespace, type, key count, age), searchable and filterable by namespace. Helm release secrets are excluded (they appear under Helm).
-- Clicking a secret opens a dialog listing its keys with values masked. Each key has an **eye toggle** that decodes and reveals the value (fetched on demand, server-side) and a copy button. Binary values are flagged and shown as base64 rather than mangled text.
+- **Scoped loading** — like Pods, Secrets are never loaded cluster-wide. Pick a **namespace** first; only that namespace's secrets are fetched. Helm release secrets are excluded (they appear under Helm).
+- Table (name, namespace, type, key count, age) with search; change namespace from the toolbar.
+- Clicking a secret opens a dialog listing its keys with values masked. A single **Reveal all / Hide all** button decodes and shows every value (fetched on demand, server-side); each key has a copy button, and binary values are flagged and shown as base64 rather than mangled text. Keys are laid out in a **responsive grid** (up to three columns on wide screens) so secrets with many keys use the horizontal space instead of a long scroll.
+- A **delete** action (with confirmation) is in the dialog header; on success the secret list refreshes.
 
 ## Helm
 

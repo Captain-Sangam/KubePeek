@@ -56,15 +56,27 @@ const deepMerge = (
 const toIso = (s?: string): string => (s ? new Date(s).toISOString() : '');
 
 // List helm releases (latest revision of each) by reading release secrets.
-export const listHelmReleases = async (clusterName: string): Promise<HelmReleaseSummary[]> => {
+export const listHelmReleases = async (
+  clusterName: string,
+  namespace?: string
+): Promise<HelmReleaseSummary[]> => {
   const { coreClient } = getClientForCluster(clusterName);
 
-  // fieldSelector is the 3rd positional arg on listSecretForAllNamespaces.
-  const { body } = await coreClient.listSecretForAllNamespaces(
-    undefined, // allowWatchBookmarks
-    undefined, // _continue
-    'type=helm.sh/release.v1'
-  );
+  // fieldSelector is the 3rd positional arg on listSecretForAllNamespaces,
+  // the 5th on listNamespacedSecret.
+  const { body } = namespace
+    ? await coreClient.listNamespacedSecret(
+        namespace,
+        undefined, // pretty
+        undefined, // allowWatchBookmarks
+        undefined, // _continue
+        'type=helm.sh/release.v1'
+      )
+    : await coreClient.listSecretForAllNamespaces(
+        undefined, // allowWatchBookmarks
+        undefined, // _continue
+        'type=helm.sh/release.v1'
+      );
 
   // Group secrets by release name + namespace, keeping the highest version.
   const latestByRelease = new Map<string, { version: number; secret: (typeof body.items)[0] }>();

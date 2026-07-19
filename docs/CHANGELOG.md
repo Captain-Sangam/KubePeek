@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **Two-part sidebar**: a compact cluster selector on top and a Compute/Workloads navigation tree below, replacing the in-content tab bar. Collapses to an icon rail.
+- **Scoped loading** for Pods, Secrets, and Helm: these are never fetched cluster-wide. Pods require a namespace or node scope; Secrets and Helm require a namespace. Filtering moved server-side (`getPods` takes a namespace/node/node-group scope; a new `namespaces` endpoint feeds the pickers). Node/node-group click-through pre-scopes the Pods view.
+- **One-click reconnect**: expired-credential requests return `401 auth_expired` and surface a Reconnect banner (plus a header button) instead of a generic error — no app restart needed after refreshing your AWS session.
+- **Delete secrets** with confirmation (pod delete already existed; both now refresh their list on success).
+- Secret dialog: single **Reveal all / Hide all** toggle and a multi-column layout for secrets with many keys.
+
+### Added (previously)
 - **Node group view**: per-node CPU and RAM usage bars and node start times inside each expanded node group.
 - **Pods**: restart counts and CPU/memory usage bars (as a percentage of limits → requests → node allocatable); filters by node group and node.
 - **Pod detail drawer** (Lens-style): Overview (status, per-container breakdown, live metrics), Events, and Logs tabs, plus a delete-pod action.

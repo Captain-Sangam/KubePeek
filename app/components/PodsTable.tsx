@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Chip, TextField, InputAdornment, TableSortLabel, Box, Tooltip,
-  FormControl, Select, MenuItem, InputLabel,
+  FormControl, Select, MenuItem, InputLabel, Button,
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
-import { Pod, Cluster } from '../types/kubernetes';
+import { Pod, Cluster, PodsScope } from '../types/kubernetes';
 import { parseNumericValue, basisLabel } from '../lib/format';
 import UsageBar from './shared/UsageBar';
 import StatusChip from './shared/StatusChip';
@@ -37,44 +37,26 @@ const headCells: HeadCell[] = [
 interface PodsTableProps {
   pods: Pod[];
   cluster: Cluster;
-  nodeFilter: string;
-  nodeGroupFilter: string;
-  onNodeFilterChange: (value: string) => void;
-  onNodeGroupFilterChange: (value: string) => void;
+  scope: PodsScope;
+  onScopeChange: (scope: PodsScope | null) => void;
+  namespaces: string[];
+  nodeNames: string[];
+  onPodDeleted?: () => void;
 }
 
 export default function PodsTable({
   pods,
   cluster,
-  nodeFilter,
-  nodeGroupFilter,
-  onNodeFilterChange,
-  onNodeGroupFilterChange,
+  scope,
+  onScopeChange,
+  namespaces,
+  nodeNames,
+  onPodDeleted,
 }: PodsTableProps) {
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
-  const [namespaceFilter, setNamespaceFilter] = useState<string>('all');
   const [selectedPod, setSelectedPod] = useState<Pod | null>(null);
-
-  const namespaces = useMemo(() => {
-    const unique = new Set(pods.map((p) => p.namespace));
-    return ['all', ...Array.from(unique).sort()];
-  }, [pods]);
-
-  const nodeGroups = useMemo(() => {
-    const unique = new Set(pods.map((p) => p.nodeGroup).filter(Boolean) as string[]);
-    return ['all', ...Array.from(unique).sort()];
-  }, [pods]);
-
-  // Node options, narrowed by the selected node group.
-  const nodeOptions = useMemo(() => {
-    const relevant = nodeGroupFilter
-      ? pods.filter((p) => p.nodeGroup === nodeGroupFilter)
-      : pods;
-    const unique = new Set(relevant.map((p) => p.nodeName).filter(Boolean));
-    return ['all', ...Array.from(unique).sort()];
-  }, [pods, nodeGroupFilter]);
 
   const handleRequestSort = (property: SortKey) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -82,11 +64,8 @@ export default function PodsTable({
     setOrderBy(property);
   };
 
+  // Server already scoped the pods; only search filters client-side.
   const filteredPods = pods.filter((pod) => {
-    if (namespaceFilter !== 'all' && pod.namespace !== namespaceFilter) return false;
-    if (nodeGroupFilter && pod.nodeGroup !== nodeGroupFilter) return false;
-    if (nodeFilter && pod.nodeName !== nodeFilter) return false;
-
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -137,7 +116,7 @@ export default function PodsTable({
 
   return (
     <>
-      <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
           variant="outlined"
           size="small"
@@ -154,53 +133,40 @@ export default function PodsTable({
             style: { fontSize: '0.8rem' },
           }}
         />
-        <FormControl size="small" sx={{ minWidth: 150, ...selectSx }}>
-          <InputLabel sx={{ fontSize: '0.8rem' }}>Namespace</InputLabel>
-          <Select
-            value={namespaceFilter}
-            label="Namespace"
-            onChange={(e) => setNamespaceFilter(e.target.value)}
-          >
-            {namespaces.map((ns) => (
-              <MenuItem key={ns} value={ns} sx={{ fontSize: '0.8rem' }}>
-                {ns === 'all' ? 'All Namespaces' : ns}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 150, ...selectSx }}>
-          <InputLabel sx={{ fontSize: '0.8rem' }}>Node Group</InputLabel>
-          <Select
-            value={nodeGroupFilter || 'all'}
-            label="Node Group"
-            onChange={(e) => {
-              const v = e.target.value === 'all' ? '' : e.target.value;
-              onNodeGroupFilterChange(v);
-              // Clear an incompatible node selection.
-              onNodeFilterChange('');
-            }}
-          >
-            {nodeGroups.map((ng) => (
-              <MenuItem key={ng} value={ng} sx={{ fontSize: '0.8rem' }}>
-                {ng === 'all' ? 'All Node Groups' : ng}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 150, ...selectSx }}>
-          <InputLabel sx={{ fontSize: '0.8rem' }}>Node</InputLabel>
-          <Select
-            value={nodeFilter || 'all'}
-            label="Node"
-            onChange={(e) => onNodeFilterChange(e.target.value === 'all' ? '' : e.target.value)}
-          >
-            {nodeOptions.map((n) => (
-              <MenuItem key={n} value={n} sx={{ fontSize: '0.8rem' }}>
-                {n === 'all' ? 'All Nodes' : n}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {/* Scope control: a dropdown to change the value within the current
+            scope type (namespace/node), plus a chip label. Deleting returns to
+            the picker to pick a different scope type. */}
+        {scope.type === 'nodeGroup' ? (
+          <Chip
+            label={`Node group: ${scope.value}`}
+            onDelete={() => onScopeChange(null)}
+            size="small"
+            color="primary"
+            variant="outlined"
+          />
+        ) : (
+          <>
+            <FormControl size="small" sx={{ minWidth: 200, ...selectSx }}>
+              <InputLabel sx={{ fontSize: '0.8rem' }}>
+                {scope.type === 'namespace' ? 'Namespace' : 'Node'}
+              </InputLabel>
+              <Select
+                value={scope.value}
+                label={scope.type === 'namespace' ? 'Namespace' : 'Node'}
+                onChange={(e) => onScopeChange({ type: scope.type, value: e.target.value })}
+              >
+                {(scope.type === 'namespace' ? namespaces : nodeNames).map((v) => (
+                  <MenuItem key={v} value={v} sx={{ fontSize: '0.8rem' }}>{v}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Tooltip title="Change scope" arrow>
+              <Button size="small" onClick={() => onScopeChange(null)} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
+                Change
+              </Button>
+            </Tooltip>
+          </>
+        )}
       </Box>
 
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 250px)' }}>
@@ -289,7 +255,9 @@ export default function PodsTable({
                 <TableCell colSpan={headCells.length} align="center" sx={{ py: 2, color: 'text.secondary' }}>
                   No pods found
                   {searchQuery && ` matching "${searchQuery}"`}
-                  {namespaceFilter !== 'all' && ` in namespace "${namespaceFilter}"`}
+                  {scope.type === 'namespace' && ` in namespace "${scope.value}"`}
+                  {scope.type === 'node' && ` on node "${scope.value}"`}
+                  {scope.type === 'nodeGroup' && ` in node group "${scope.value}"`}
                 </TableCell>
               </TableRow>
             )}
@@ -302,6 +270,10 @@ export default function PodsTable({
         cluster={cluster}
         open={!!selectedPod}
         onClose={() => setSelectedPod(null)}
+        onDeleted={() => {
+          setSelectedPod(null);
+          onPodDeleted?.();
+        }}
       />
     </>
   );

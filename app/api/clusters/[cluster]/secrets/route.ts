@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listSecrets } from '../../../../lib/kubernetes-server';
+import { listSecrets, isAuthError } from '../../../../lib/kubernetes-server';
 
 export async function GET(
   request: NextRequest,
@@ -21,6 +21,9 @@ export async function GET(
     return NextResponse.json(secrets);
   } catch (error) {
     console.error('Error in secrets API:', error);
+    if (isAuthError(error)) {
+      return NextResponse.json({ error: 'auth_expired' }, { status: 401 });
+    }
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : 'An error occurred' },
       { status: 500 }
