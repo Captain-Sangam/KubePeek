@@ -1,9 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { List, ListItem, ListItemButton, ListItemText, Typography, Divider, CircularProgress, Box, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button } from '@mui/material';
+import { List, ListItem, ListItemButton, ListItemText, Typography, Divider, CircularProgress, Box, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Tooltip, Avatar } from '@mui/material';
 import { Cluster } from '../types/kubernetes';
-import { CloudCircle as CloudIcon, Edit as EditIcon } from '@mui/icons-material';
+import {
+  CloudCircle as CloudIcon,
+  Edit as EditIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+} from '@mui/icons-material';
 import { saveClusterDisplayName } from '../lib/kubernetes-client';
 import { useTheme } from '../lib/ThemeProvider';
 
@@ -12,13 +17,34 @@ interface ClusterListProps {
   selectedCluster: Cluster | null;
   onSelectCluster: (cluster: Cluster) => void;
   loading: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export default function ClusterList({ 
-  clusters, 
-  selectedCluster, 
+// Format cluster name to be more readable (module scope so both render paths use it).
+const formatClusterName = (name: string): string => {
+  let formatted = name.replace(/[_-]/g, ' ');
+  formatted = formatted.replace(/\w\S*/g, (txt) =>
+    txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+  );
+  return formatted;
+};
+
+// Two-letter initials for the collapsed icon rail.
+const clusterInitials = (cluster: Cluster): string => {
+  const label = cluster.displayName || formatClusterName(cluster.name);
+  const words = label.trim().split(/\s+/);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return label.slice(0, 2).toUpperCase();
+};
+
+export default function ClusterList({
+  clusters,
+  selectedCluster,
   onSelectCluster,
-  loading 
+  loading,
+  collapsed = false,
+  onToggleCollapse,
 }: ClusterListProps) {
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
   const [displayName, setDisplayName] = useState('');
@@ -113,32 +139,62 @@ export default function ClusterList({
     }
   };
 
-  // Format cluster name to be more readable
-  const formatClusterName = (name: string): string => {
-    // Replace underscores and hyphens with spaces
-    let formatted = name.replace(/[_-]/g, ' ');
-    
-    // Capitalize first letter of each word
-    formatted = formatted.replace(/\w\S*/g, (txt) => {
-      return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-    });
-    
-    return formatted;
-  };
+  // Collapsed icon-rail: avatars with tooltips, plus an expand toggle.
+  if (collapsed) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
+        <Tooltip title="Expand sidebar" placement="right" arrow>
+          <IconButton size="small" onClick={onToggleCollapse} sx={{ mb: 1 }}>
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Divider flexItem sx={{ mb: 1 }} />
+        <Box sx={{ overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+          {clusters.map((cluster) => {
+            const isSelected = selectedCluster?.name === cluster.name;
+            return (
+              <Tooltip
+                key={cluster.name}
+                title={`${cluster.displayName || formatClusterName(cluster.name)}${cluster.server ? ` — ${cluster.server}` : ''}`}
+                placement="right"
+                arrow
+              >
+                <Avatar
+                  onClick={() => onSelectCluster(cluster)}
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    bgcolor: isSelected ? 'primary.main' : (mode === 'light' ? 'grey.300' : 'grey.700'),
+                    color: isSelected ? 'primary.contrastText' : 'text.primary',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                >
+                  {clusterInitials(cluster)}
+                </Avatar>
+              </Tooltip>
+            );
+          })}
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <>
-      <Typography 
-        variant="subtitle1" 
-        sx={{ 
-          mb: 1.5, 
-          fontSize: '0.9rem', 
-          fontWeight: 600,
-          px: 1
-        }}
-      >
-        Clusters
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, px: 1 }}>
+        <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600 }}>
+          Clusters
+        </Typography>
+        {onToggleCollapse && (
+          <Tooltip title="Collapse sidebar" arrow>
+            <IconButton size="small" onClick={onToggleCollapse} sx={{ p: 0.5 }}>
+              <ChevronLeftIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
       <Divider sx={{ mb: 1.5 }} />
       <List sx={{ p: 0, overflowY: 'auto' }} dense>
         {clusters.map((cluster) => (

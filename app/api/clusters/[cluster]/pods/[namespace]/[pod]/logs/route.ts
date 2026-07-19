@@ -26,14 +26,17 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     
     const containerName = searchParams.get('container') || undefined;
-    const tailLines = searchParams.get('tail') 
-      ? parseInt(searchParams.get('tail') as string, 10) 
+    const tailLines = searchParams.get('tail')
+      ? parseInt(searchParams.get('tail') as string, 10)
       : undefined;
-    
-    console.log(`Fetching logs for pod ${namespace}/${pod} in cluster ${cluster}`, 
-      { containerName, tailLines });
-    
-    const result = await getPodLogs(cluster, namespace, pod, containerName, tailLines);
+    // Timestamps default to true so the client can parse ISO-prefixed lines.
+    const timestamps = searchParams.get('timestamps') !== 'false';
+    const previous = searchParams.get('previous') === 'true';
+
+    console.log(`Fetching logs for pod ${namespace}/${pod} in cluster ${cluster}`,
+      { containerName, tailLines, timestamps, previous });
+
+    const result = await getPodLogs(cluster, namespace, pod, containerName, tailLines, timestamps, previous);
     console.log(`Pod logs API result success: ${result.success}`);
     
     if (result.success) {

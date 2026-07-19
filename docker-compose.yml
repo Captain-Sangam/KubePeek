@@ -13,12 +13,6 @@ services:
     volumes:
       - ${HOME}/.kube:/root/.kube:ro
       - ${HOME}/.aws:/root/.aws:ro
-      - kubepeek_data:/tmp/kubepeek
     environment:
       - NODE_ENV=production
-      - KUBECONFIG=/root/.kube/config
-      - DEBUG=true
-      - STORAGE_DIR=/tmp/kubepeek
-
-volumes:
-  kubepeek_data: 
+      - KUBECONFIG=/root/.kube/config 

@@ -1,29 +1,33 @@
-FROM node:18-alpine
+# Multi-stage build producing a Next.js standalone production server.
+# (The old image ran `next dev` because the build was broken by a stray
+# `'use server'` directive — that is fixed, so we ship a real production build.)
 
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Install required system dependencies
-RUN apk add --no-cache curl python3 bash aws-cli kubectl
+# aws-cli is needed for EKS exec-auth (`aws eks get-token`). kubectl is no
+# longer required — the kubectl-describe fallback was removed.
+RUN apk add --no-cache aws-cli
 
-# Copy package files and install dependencies
-COPY package.json package-lock.json* ./
-RUN npm install
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+ENV KUBECONFIG=/root/.kube/config
 
-# Copy the application code
-COPY . .
-
-# Set environment variables
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
-ENV KUBECONFIG /root/.kube/config
-
-# Create necessary directories
 RUN mkdir -p /root/.kube /root/.aws
 
-# Expose the application port
+# Standalone output bundles only the traced dependencies + a minimal server.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
 EXPOSE 3000
 
-# Start the development server
-CMD ["npm", "run", "dev"]
-
-# There are some issue with build process, so we are using dev mode for now
+CMD ["node", "server.js"]

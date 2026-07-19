@@ -1,289 +1,131 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, Typography, Tabs, Tab, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Tabs, Tab, Alert } from '@mui/material';
 import NodesTable from './NodesTable';
 import PodsTable from './PodsTable';
+import SecretsTable from './secrets/SecretsTable';
+import HelmReleasesTable from './helm/HelmReleasesTable';
+import TabPanel from './shared/TabPanel';
+import PanelState from './shared/PanelState';
 import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
+import { useFetch } from '../hooks/useFetch';
 import { useTheme } from '../lib/ThemeProvider';
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <Box
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      sx={{ p: 1, pt: 2 }}
-      {...other}
-    >
-      {value === index && children}
-    </Box>
-  );
-}
 
 interface ClusterDetailsProps {
   cluster: Cluster;
 }
 
-export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
-  // Log the received cluster prop on each render
-  console.log('[ClusterDetails] Received cluster prop:', cluster);
+const TABS = ['Node Groups', 'Pods', 'Secrets', 'Helm'];
 
+export default function ClusterDetails({ cluster }: ClusterDetailsProps) {
   const [tabValue, setTabValue] = useState(0);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [pods, setPods] = useState<Pod[]>([]);
-  const [nodeGroups, setNodeGroups] = useState<NodeGroupInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [selectedNodeGroup, setSelectedNodeGroup] = useState<string | null>(null);
+  const [visitedTabs, setVisitedTabs] = useState<Set<number>>(new Set([0]));
+  const [nodeFilter, setNodeFilter] = useState<string>('');
+  const [nodeGroupFilter, setNodeGroupFilter] = useState<string>('');
   const { mode } = useTheme();
 
+  const base = `/api/clusters/${encodeURIComponent(cluster.name)}`;
+
+  // Parallel fetch for the primary tabs. Secrets/Helm fetch lazily in their own components.
+  const nodesQ = useFetch<Node[]>(`${base}/nodes`);
+  const podsQ = useFetch<Pod[]>(`${base}/pods`);
+  const nodeGroupsQ = useFetch<NodeGroupInfo[]>(`${base}/nodegroups`);
+
+  // Reset per-cluster state when the cluster changes.
   useEffect(() => {
-    const fetchClusterDetails = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Fetch nodes
-        const nodesRes = await fetch(`/api/clusters/${encodeURIComponent(cluster.name)}/nodes`);
-        if (!nodesRes.ok) {
-          let errorMessage = `Failed to fetch nodes: ${nodesRes.statusText}`;
-          try {
-            const errorData = await nodesRes.json();
-            if (errorData.error) errorMessage = errorData.error;
-          } catch (e) {
-            // JSON parsing failed, use default error message
-          }
-          throw new Error(errorMessage);
-        }
-        
-        let nodesData;
-        try {
-          nodesData = await nodesRes.json();
-          setNodes(nodesData);
-        } catch (parseError) {
-          throw new Error('Failed to parse nodes response: Invalid JSON data');
-        }
-        
-        // Fetch pods
-        const podsRes = await fetch(`/api/clusters/${encodeURIComponent(cluster.name)}/pods`);
-        if (!podsRes.ok) {
-          let errorMessage = `Failed to fetch pods: ${podsRes.statusText}`;
-          try {
-            const errorData = await podsRes.json();
-            if (errorData.error) errorMessage = errorData.error;
-          } catch (e) {
-            // JSON parsing failed, use default error message
-          }
-          throw new Error(errorMessage);
-        }
-        
-        let podsData;
-        try {
-          podsData = await podsRes.json();
-          setPods(podsData);
-        } catch (parseError) {
-          throw new Error('Failed to parse pods response: Invalid JSON data');
-        }
-        
-        // Fetch node groups
-        const nodeGroupsRes = await fetch(`/api/clusters/${encodeURIComponent(cluster.name)}/nodegroups`);
-        if (!nodeGroupsRes.ok) {
-          let errorMessage = `Failed to fetch node groups: ${nodeGroupsRes.statusText}`;
-          try {
-            const errorData = await nodeGroupsRes.json();
-            if (errorData.error) errorMessage = errorData.error;
-          } catch (e) {
-            // JSON parsing failed, use default error message
-          }
-          throw new Error(errorMessage);
-        }
-        
-        let nodeGroupsData;
-        try {
-          nodeGroupsData = await nodeGroupsRes.json();
-          setNodeGroups(nodeGroupsData);
-        } catch (parseError) {
-          throw new Error('Failed to parse node groups response: Invalid JSON data');
-        }
-        
-      } catch (err: any) {
-        console.error('Error fetching cluster details:', err);
-        setError(err.message || 'Failed to fetch cluster details');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchClusterDetails();
-    // Reset selections when cluster changes
-    setSelectedNode(null);
-    setSelectedNodeGroup(null);
     setTabValue(0);
-  }, [cluster]);
+    setVisitedTabs(new Set([0]));
+    setNodeFilter('');
+    setNodeGroupFilter('');
+  }, [cluster.name]);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+    setVisitedTabs((prev) => new Set(prev).add(newValue));
   };
 
   const handleNodeSelect = (nodeName: string) => {
-    setSelectedNode(nodeName);
-    setTabValue(1); // Switch to pods tab
+    setNodeFilter(nodeName);
+    setNodeGroupFilter('');
+    setTabValue(1);
+    setVisitedTabs((prev) => new Set(prev).add(1));
   };
 
   const handleNodeGroupSelect = (nodeGroupName: string) => {
-    setSelectedNodeGroup(nodeGroupName);
-    setTabValue(1); // Switch to pods tab
+    setNodeGroupFilter(nodeGroupName);
+    setNodeFilter('');
+    setTabValue(1);
+    setVisitedTabs((prev) => new Set(prev).add(1));
   };
-
-  // Filter pods based on selection
-  const filteredPods = pods.filter(pod => {
-    if (selectedNode) {
-      return pod.nodeName === selectedNode;
-    }
-    if (selectedNodeGroup) {
-      const nodeGroup = nodeGroups.find(ng => ng.name === selectedNodeGroup);
-      return nodeGroup?.nodes.some(node => node.name === pod.nodeName) || false;
-    }
-    return true;
-  });
-
-  const clearFilters = () => {
-    setSelectedNode(null);
-    setSelectedNodeGroup(null);
-  };
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <CircularProgress size={24} />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert 
-        severity="error" 
-        sx={{ 
-          m: 1, 
-          py: 0.5, 
-          fontSize: '0.8rem',
-          color: mode === 'light' ? undefined : '#fff' 
-        }}
-      >
-        {error}
-      </Alert>
-    );
-  }
 
   return (
     <Box sx={{ height: '100%' }}>
-      <Typography 
-        variant="subtitle1" 
-        sx={{ 
-          mb: 1, 
-          fontSize: '1rem', 
-          fontWeight: 600,
-          color: mode === 'light' ? '#212121' : '#e0e0e0'
-        }}
-      >
+      <Typography variant="subtitle1" sx={{ mb: 1, fontSize: '1rem', fontWeight: 600 }}>
         {cluster.displayName || cluster.name}
       </Typography>
-      <Typography 
-        variant="body2" 
-        color={mode === 'light' ? 'text.secondary' : '#b0b0b0'} 
-        sx={{ mb: 1.5, fontSize: '0.75rem' }}
-      >
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontSize: '0.75rem' }}>
         {cluster.server}
         {cluster.displayName && (
-          <Box 
-            component="span" 
-            sx={{ 
-              ml: 1, 
-              color: mode === 'light' ? 'text.disabled' : '#909090'
-            }}
-          >
+          <Box component="span" sx={{ ml: 1, color: 'text.disabled' }}>
             (Original name: {cluster.name})
           </Box>
         )}
       </Typography>
 
-      <Box sx={{ borderBottom: 1, borderColor: mode === 'light' ? 'divider' : 'rgba(255,255,255,0.12)' }}>
-        <Tabs 
-          value={tabValue} 
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs
+          value={tabValue}
           onChange={handleTabChange}
-          sx={{ 
+          sx={{
             minHeight: '36px',
-            '& .MuiTab-root': {
-              minHeight: '36px',
-              fontSize: '0.75rem',
-              padding: '6px 12px',
-              color: mode === 'light' ? 'text.primary' : '#b0b0b0',
-              '&.Mui-selected': {
-                color: mode === 'light' ? 'primary.main' : '#fff',
-              }
-            },
-            '& .MuiTabs-indicator': {
-              backgroundColor: mode === 'light' ? 'primary.main' : '#fff',
-            }
+            '& .MuiTab-root': { minHeight: '36px', fontSize: '0.75rem', padding: '6px 12px' },
           }}
         >
-          <Tab label="Nodes" id="simple-tab-0" aria-controls="simple-tabpanel-0" disableRipple />
-          <Tab label="Pods" id="simple-tab-1" aria-controls="simple-tabpanel-1" disableRipple />
+          {TABS.map((label, i) => (
+            <Tab key={label} label={label} id={`tab-${i}`} disableRipple />
+          ))}
         </Tabs>
       </Box>
 
-      <TabPanel value={tabValue} index={0}>
-        <NodesTable 
-          nodes={nodes}
-          nodeGroups={nodeGroups}
-          onNodeSelect={handleNodeSelect}
-          onNodeGroupSelect={handleNodeGroupSelect}
-        />
+      <TabPanel value={tabValue} index={0} keepMounted sx={{ p: 1, pt: 2 }}>
+        <PanelState
+          loading={nodesQ.loading || nodeGroupsQ.loading}
+          error={nodesQ.error || nodeGroupsQ.error}
+          onRetry={() => {
+            nodesQ.refetch();
+            nodeGroupsQ.refetch();
+          }}
+        >
+          <NodesTable
+            nodes={nodesQ.data || []}
+            nodeGroups={nodeGroupsQ.data || []}
+            onNodeSelect={handleNodeSelect}
+            onNodeGroupSelect={handleNodeGroupSelect}
+          />
+        </PanelState>
       </TabPanel>
-      <TabPanel value={tabValue} index={1}>
-        <Box sx={{ height: '100%' }}>
-          {(selectedNode || selectedNodeGroup) && (
-            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-              <Typography 
-                variant="body2" 
-                sx={{ mr: 1, fontSize: '0.8rem', color: mode === 'light' ? 'text.secondary' : '#b0b0b0' }}
-              >
-                {selectedNode 
-                  ? `Showing pods on node: ${selectedNode}` 
-                  : `Showing pods in node group: ${selectedNodeGroup}`}
-              </Typography>
-              <Box 
-                component="span" 
-                onClick={clearFilters}
-                sx={{ 
-                  fontSize: '0.8rem', 
-                  color: 'primary.main', 
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  '&:hover': { 
-                    color: mode === 'light' ? 'primary.dark' : 'primary.light',
-                  }
-                }}
-              >
-                (Clear filter)
-              </Box>
-            </Box>
-          )}
-          <PodsTable pods={filteredPods} cluster={cluster} />
-        </Box>
+
+      <TabPanel value={tabValue} index={1} keepMounted sx={{ p: 1, pt: 2 }}>
+        <PanelState loading={podsQ.loading} error={podsQ.error} onRetry={podsQ.refetch}>
+          <PodsTable
+            pods={podsQ.data || []}
+            cluster={cluster}
+            nodeFilter={nodeFilter}
+            nodeGroupFilter={nodeGroupFilter}
+            onNodeFilterChange={setNodeFilter}
+            onNodeGroupFilterChange={setNodeGroupFilter}
+          />
+        </PanelState>
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={2} keepMounted sx={{ p: 1, pt: 2 }}>
+        {visitedTabs.has(2) && <SecretsTable cluster={cluster} />}
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={3} keepMounted sx={{ p: 1, pt: 2 }}>
+        {visitedTabs.has(3) && <HelmReleasesTable cluster={cluster} />}
       </TabPanel>
     </Box>
   );
-} 
+}

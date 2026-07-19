@@ -29,13 +29,32 @@ export const getClusterDisplayNames = (): Record<string, string> => {
   try {
     // Read from localStorage
     const existingData = localStorage.getItem(CLUSTER_NAMES_STORAGE_KEY);
-    
+
     if (existingData) {
       return JSON.parse(existingData);
     }
   } catch (error) {
     console.error('Error retrieving cluster display names:', error);
   }
-  
+
   return {};
-}; 
+};
+
+// Storage key for the sidebar collapsed state
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'kubepeek_sidebar_collapsed';
+
+export const getSidebarCollapsed = (): boolean => {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const saveSidebarCollapsed = (collapsed: boolean): void => {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch (error) {
+    console.error('Error saving sidebar collapsed state:', error);
+  }
+};

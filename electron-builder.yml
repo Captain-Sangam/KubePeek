@@ -1,0 +1,24 @@
+appId: com.kubepeek.app
+productName: KubePeek
+directories:
+  output: dist
+files:
+  - electron/**
+  - package.json
+# The Next.js standalone server is shipped as extraResources (NOT inside asar)
+# because Next's runtime does dynamic requires that break under asar packaging.
+extraResources:
+  - from: .next/standalone
+    to: server
+  - from: .next/static
+    to: server/.next/static
+  - from: public
+    to: server/public
+mac:
+  category: public.app-category.developer-tools
+  # Local, unsigned builds — no certificates required (electron-builder
+  # ad-hoc signs automatically on Apple Silicon so the app still launches).
+  identity: null
+  icon: build/icon.icns
+  target:
+    - target: dir

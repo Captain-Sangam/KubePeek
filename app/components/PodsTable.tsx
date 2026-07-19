@@ -1,443 +1,292 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { 
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
+import {
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Chip, TextField, InputAdornment, TableSortLabel, Box, Tooltip,
-  FormControl, Select, MenuItem, InputLabel, Grid
+  FormControl, Select, MenuItem, InputLabel,
 } from '@mui/material';
-import { 
-  Search as SearchIcon,
-  CheckCircle as SuccessIcon,
-  Warning as WarningIcon,
-  Error as ErrorIcon,
-  Info as InfoIcon
-} from '@mui/icons-material';
+import { Search as SearchIcon } from '@mui/icons-material';
 import { Pod, Cluster } from '../types/kubernetes';
-import { useTheme } from '../lib/ThemeProvider';
+import { parseNumericValue, basisLabel } from '../lib/format';
+import UsageBar from './shared/UsageBar';
+import StatusChip from './shared/StatusChip';
+import PodDetailDrawer from './pods/PodDetailDrawer';
 
 type Order = 'asc' | 'desc';
+type SortKey = 'name' | 'namespace' | 'status' | 'restarts' | 'cpuUsage' | 'memoryUsage' | 'nodeName' | 'creationTimestamp';
 
 interface HeadCell {
-  id: keyof Pod;
+  id: SortKey;
   label: string;
-  sortable: boolean;
+  align?: 'left' | 'right';
+  width: string;
 }
 
 const headCells: HeadCell[] = [
-  { id: 'name', label: 'Name', sortable: true },
-  { id: 'namespace', label: 'Namespace', sortable: true },
-  { id: 'status', label: 'Status', sortable: true },
-  { id: 'helmChart', label: 'Helm Chart', sortable: true },
-  { id: 'helmVersion', label: 'Version', sortable: true },
-  { id: 'cpuUsage', label: 'CPU Usage', sortable: true },
-  { id: 'memoryUsage', label: 'Memory Usage', sortable: true },
-  { id: 'nodeName', label: 'Node', sortable: true },
-  { id: 'creationTimestamp', label: 'Age', sortable: true },
+  { id: 'name', label: 'Name', width: '24%' },
+  { id: 'namespace', label: 'Namespace', width: '12%' },
+  { id: 'status', label: 'Status', width: '10%' },
+  { id: 'restarts', label: 'Restarts', align: 'right', width: '8%' },
+  { id: 'cpuUsage', label: 'CPU', width: '14%' },
+  { id: 'memoryUsage', label: 'Memory', width: '14%' },
+  { id: 'nodeName', label: 'Node', width: '12%' },
+  { id: 'creationTimestamp', label: 'Age', width: '6%' },
 ];
-
-// Define column widths for consistent alignment
-const columnWidths = {
-  name: '20%',
-  namespace: '10%',
-  status: '10%',
-  helmChart: '12%',
-  helmVersion: '8%',
-  cpuUsage: '10%',
-  memoryUsage: '10%',
-  nodeName: '12%',
-  age: '8%'
-};
 
 interface PodsTableProps {
   pods: Pod[];
   cluster: Cluster;
+  nodeFilter: string;
+  nodeGroupFilter: string;
+  onNodeFilterChange: (value: string) => void;
+  onNodeGroupFilterChange: (value: string) => void;
 }
 
-export default function PodsTable({ pods, cluster }: PodsTableProps) {
+export default function PodsTable({
+  pods,
+  cluster,
+  nodeFilter,
+  nodeGroupFilter,
+  onNodeFilterChange,
+  onNodeGroupFilterChange,
+}: PodsTableProps) {
   const [order, setOrder] = useState<Order>('asc');
-  const [orderBy, setOrderBy] = useState<keyof Pod>('name');
+  const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
   const [namespaceFilter, setNamespaceFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const { mode } = useTheme();
+  const [selectedPod, setSelectedPod] = useState<Pod | null>(null);
 
-  // Extract unique namespaces for the filter dropdown
   const namespaces = useMemo(() => {
-    const uniqueNamespaces = new Set(pods.map(pod => pod.namespace));
-    return ['all', ...Array.from(uniqueNamespaces)].sort();
+    const unique = new Set(pods.map((p) => p.namespace));
+    return ['all', ...Array.from(unique).sort()];
   }, [pods]);
 
-  const handleRequestSort = (property: keyof Pod) => {
+  const nodeGroups = useMemo(() => {
+    const unique = new Set(pods.map((p) => p.nodeGroup).filter(Boolean) as string[]);
+    return ['all', ...Array.from(unique).sort()];
+  }, [pods]);
+
+  // Node options, narrowed by the selected node group.
+  const nodeOptions = useMemo(() => {
+    const relevant = nodeGroupFilter
+      ? pods.filter((p) => p.nodeGroup === nodeGroupFilter)
+      : pods;
+    const unique = new Set(relevant.map((p) => p.nodeName).filter(Boolean));
+    return ['all', ...Array.from(unique).sort()];
+  }, [pods, nodeGroupFilter]);
+
+  const handleRequestSort = (property: SortKey) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'running':
-        return <SuccessIcon fontSize="small" color="success" />;
-      case 'pending':
-        return <InfoIcon fontSize="small" color="info" />;
-      case 'failed':
-        return <ErrorIcon fontSize="small" color="error" />;
-      case 'terminating':
-        return <WarningIcon fontSize="small" color="warning" />;
-      default:
-        return <InfoIcon fontSize="small" color="disabled" />;
-    }
-  };
+  const filteredPods = pods.filter((pod) => {
+    if (namespaceFilter !== 'all' && pod.namespace !== namespaceFilter) return false;
+    if (nodeGroupFilter && pod.nodeGroup !== nodeGroupFilter) return false;
+    if (nodeFilter && pod.nodeName !== nodeFilter) return false;
 
-  // Filter pods based on search query and namespace
-  const filteredPods = pods.filter(pod => {
-    // Filter by namespace first
-    if (namespaceFilter !== 'all' && pod.namespace !== namespaceFilter) {
-      return false;
-    }
-    
-    // Then filter by search query
     if (!searchQuery) return true;
-    
-    const query = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase();
     return (
-      pod.name.toLowerCase().includes(query) ||
-      pod.namespace.toLowerCase().includes(query) ||
-      pod.status.toLowerCase().includes(query) ||
-      (pod.helmChart && pod.helmChart.toLowerCase().includes(query)) ||
-      (pod.helmVersion && pod.helmVersion.toLowerCase().includes(query)) ||
-      pod.nodeName.toLowerCase().includes(query)
+      pod.name.toLowerCase().includes(q) ||
+      pod.namespace.toLowerCase().includes(q) ||
+      pod.status.toLowerCase().includes(q) ||
+      (pod.helmChart && pod.helmChart.toLowerCase().includes(q)) ||
+      pod.nodeName.toLowerCase().includes(q)
     );
   });
 
-  // Sort pods based on orderBy and order
+  const cmp = (a: number | string, b: number | string) =>
+    order === 'desc' ? (b < a ? -1 : b > a ? 1 : 0) : a < b ? -1 : a > b ? 1 : 0;
+
   const sortedPods = [...filteredPods].sort((a, b) => {
-    let aValue: any = a[orderBy];
-    let bValue: any = b[orderBy];
-
-    // Handle undefined values
-    if (aValue === undefined) aValue = '';
-    if (bValue === undefined) bValue = '';
-
-    // Special handling for CPU and memory usage to sort numerically
-    if (orderBy === 'cpuUsage' || orderBy === 'memoryUsage') {
-      // Extract numeric value (removing units like 'm' for millicores or 'Mi' for memory)
-      const aNum = parseFloat(aValue);
-      const bNum = parseFloat(bValue);
-      
-      if (order === 'desc') {
-        return bNum - aNum;
-      } else {
-        return aNum - bNum;
-      }
-    }
-
-    // Default string comparison
-    if (order === 'desc') {
-      return bValue.localeCompare(aValue);
-    } else {
-      return aValue.localeCompare(bValue);
+    switch (orderBy) {
+      case 'restarts':
+        return cmp(a.restarts || 0, b.restarts || 0);
+      case 'cpuUsage':
+        return cmp(parseNumericValue(a.cpuUsage), parseNumericValue(b.cpuUsage));
+      case 'memoryUsage':
+        return cmp(parseNumericValue(a.memoryUsage), parseNumericValue(b.memoryUsage));
+      case 'creationTimestamp':
+        return cmp(a.createdAt || '', b.createdAt || '');
+      default:
+        return cmp(
+          String(a[orderBy] ?? '').toLowerCase(),
+          String(b[orderBy] ?? '').toLowerCase()
+        );
     }
   });
 
+  const cpuTooltip = (pod: Pod): string => {
+    const denom = pod.cpuBasis === 'limit' ? pod.cpuLimit : pod.cpuBasis === 'request' ? pod.cpuRequest : undefined;
+    if (pod.cpuPercent == null) return `CPU ${pod.cpuUsage}`;
+    return `${pod.cpuUsage} of ${denom || 'node allocatable'} ${basisLabel(pod.cpuBasis)} (${pod.cpuPercent}%)`;
+  };
+  const memTooltip = (pod: Pod): string => {
+    const denom = pod.memoryBasis === 'limit' ? pod.memoryLimit : pod.memoryBasis === 'request' ? pod.memoryRequest : undefined;
+    if (pod.memoryPercent == null) return `Memory ${pod.memoryUsage}`;
+    return `${pod.memoryUsage} of ${denom || 'node allocatable'} ${basisLabel(pod.memoryBasis)} (${pod.memoryPercent}%)`;
+  };
+
+  const selectSx = {
+    '& .MuiInputBase-root': { height: '32px', fontSize: '0.8rem' },
+  };
+  const cellSx = { py: 0.5, px: 1, fontSize: '0.75rem' };
+
   return (
     <>
-      <Grid container spacing={1} sx={{ mb: 1 }}>
-        <Grid item xs={8}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            size="small"
-            placeholder="Search pods..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" sx={{ color: mode === 'light' ? 'inherit' : '#b0b0b0' }} />
-                </InputAdornment>
-              ),
-              style: { fontSize: '0.8rem' }
-            }}
-            sx={{ 
-              '& .MuiInputBase-root': { 
-                height: '32px',
-                color: mode === 'light' ? 'inherit' : '#e0e0e0',
-              },
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: mode === 'light' ? 'rgba(0, 0, 0, 0.23)' : 'rgba(255, 255, 255, 0.23)',
-              },
-              '& .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: mode === 'light' ? 'rgba(0, 0, 0, 0.87)' : 'rgba(255, 255, 255, 0.87)',
-              }
-            }}
-          />
-        </Grid>
-        <Grid item xs={4}>
-          <FormControl 
-            fullWidth 
-            size="small" 
-            sx={{ 
-              '& .MuiInputBase-root': { 
-                height: '32px', 
-                fontSize: '0.8rem',
-                color: mode === 'light' ? 'inherit' : '#e0e0e0',
-              },
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: mode === 'light' ? 'rgba(0, 0, 0, 0.23)' : 'rgba(255, 255, 255, 0.23)',
-              },
-              '& .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: mode === 'light' ? 'rgba(0, 0, 0, 0.87)' : 'rgba(255, 255, 255, 0.87)',
-              }
+      <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+        <TextField
+          variant="outlined"
+          size="small"
+          placeholder="Search pods..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          sx={{ flex: 1, minWidth: 180, '& .MuiInputBase-root': { height: '32px' } }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+            style: { fontSize: '0.8rem' },
+          }}
+        />
+        <FormControl size="small" sx={{ minWidth: 150, ...selectSx }}>
+          <InputLabel sx={{ fontSize: '0.8rem' }}>Namespace</InputLabel>
+          <Select
+            value={namespaceFilter}
+            label="Namespace"
+            onChange={(e) => setNamespaceFilter(e.target.value)}
+          >
+            {namespaces.map((ns) => (
+              <MenuItem key={ns} value={ns} sx={{ fontSize: '0.8rem' }}>
+                {ns === 'all' ? 'All Namespaces' : ns}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 150, ...selectSx }}>
+          <InputLabel sx={{ fontSize: '0.8rem' }}>Node Group</InputLabel>
+          <Select
+            value={nodeGroupFilter || 'all'}
+            label="Node Group"
+            onChange={(e) => {
+              const v = e.target.value === 'all' ? '' : e.target.value;
+              onNodeGroupFilterChange(v);
+              // Clear an incompatible node selection.
+              onNodeFilterChange('');
             }}
           >
-            <InputLabel 
-              id="namespace-filter-label" 
-              sx={{ 
-                fontSize: '0.8rem',
-                color: mode === 'light' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.6)',
-                '&.Mui-focused': {
-                  color: mode === 'light' ? 'primary.main' : 'primary.light'
-                }
-              }}
-            >
-              Namespace
-            </InputLabel>
-            <Select
-              labelId="namespace-filter-label"
-              id="namespace-filter"
-              value={namespaceFilter}
-              label="Namespace"
-              onChange={(e) => setNamespaceFilter(e.target.value)}
-            >
-              {namespaces.map((namespace) => (
-                <MenuItem key={namespace} value={namespace} sx={{ fontSize: '0.8rem' }}>
-                  {namespace === 'all' ? 'All Namespaces' : namespace}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-      </Grid>
+            {nodeGroups.map((ng) => (
+              <MenuItem key={ng} value={ng} sx={{ fontSize: '0.8rem' }}>
+                {ng === 'all' ? 'All Node Groups' : ng}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 150, ...selectSx }}>
+          <InputLabel sx={{ fontSize: '0.8rem' }}>Node</InputLabel>
+          <Select
+            value={nodeFilter || 'all'}
+            label="Node"
+            onChange={(e) => onNodeFilterChange(e.target.value === 'all' ? '' : e.target.value)}
+          >
+            {nodeOptions.map((n) => (
+              <MenuItem key={n} value={n} sx={{ fontSize: '0.8rem' }}>
+                {n === 'all' ? 'All Nodes' : n}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
 
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 250px)' }}>
         <Table stickyHeader size="small" aria-label="pods table" sx={{ tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow>
-              {headCells.map((headCell, index) => {
-                let width = columnWidths.name;
-                let align: "left" | "right" | "center" = "left";
-                
-                // Set width based on column type
-                if (headCell.id === 'name') width = columnWidths.name;
-                else if (headCell.id === 'namespace') width = columnWidths.namespace;
-                else if (headCell.id === 'status') width = columnWidths.status;
-                else if (headCell.id === 'helmChart') width = columnWidths.helmChart;
-                else if (headCell.id === 'helmVersion') width = columnWidths.helmVersion;
-                else if (headCell.id === 'cpuUsage') {
-                  width = columnWidths.cpuUsage;
-                  align = "right";
-                }
-                else if (headCell.id === 'memoryUsage') {
-                  width = columnWidths.memoryUsage;
-                  align = "right";
-                }
-                else if (headCell.id === 'nodeName') width = columnWidths.nodeName;
-                else if (headCell.id === 'creationTimestamp') width = columnWidths.age;
-                
-                return (
-                  <TableCell
-                    align={align}
-                    key={`${headCell.id}-${index}`}
-                    sortDirection={orderBy === headCell.id ? order : false}
-                    sx={{ 
-                      backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.05)',
-                      py: 0.75,
-                      px: 1,
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: mode === 'light' ? '#212121' : '#e0e0e0',
-                      width: width,
-                      maxWidth: width
-                    }}
+              {headCells.map((headCell) => (
+                <TableCell
+                  align={headCell.align || 'left'}
+                  key={headCell.id}
+                  sortDirection={orderBy === headCell.id ? order : false}
+                  sx={{
+                    backgroundColor: 'action.hover',
+                    py: 0.75, px: 1, fontSize: '0.75rem', fontWeight: 600,
+                    width: headCell.width, maxWidth: headCell.width,
+                  }}
+                >
+                  <TableSortLabel
+                    active={orderBy === headCell.id}
+                    direction={orderBy === headCell.id ? order : 'asc'}
+                    onClick={() => handleRequestSort(headCell.id)}
                   >
-                    {headCell.sortable ? (
-                      <TableSortLabel
-                        active={orderBy === headCell.id}
-                        direction={orderBy === headCell.id ? order : 'asc'}
-                        onClick={() => handleRequestSort(headCell.id)}
-                        sx={{
-                          color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                          '& .MuiTableSortLabel-icon': {
-                            color: mode === 'light' ? 'inherit !important' : '#e0e0e0 !important'
-                          }
-                        }}
-                      >
-                        {headCell.label}
-                      </TableSortLabel>
-                    ) : (
-                      headCell.label
-                    )}
-                  </TableCell>
-                );
-              })}
+                    {headCell.label}
+                  </TableSortLabel>
+                </TableCell>
+              ))}
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedPods.map((pod) => (
-              <TableRow 
+              <TableRow
                 key={`${pod.namespace}-${pod.name}`}
                 hover
-                sx={{ cursor: 'default' }}
+                onClick={() => setSelectedPod(pod)}
+                sx={{ cursor: 'pointer' }}
               >
-                <TableCell 
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.name,
-                    maxWidth: columnWidths.name,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title={pod.name}
-                >
+                <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pod.name}>
                   {pod.name}
                 </TableCell>
-                <TableCell 
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.namespace,
-                    maxWidth: columnWidths.namespace
-                  }}
-                >
-                  <Chip 
-                    label={pod.namespace} 
-                    size="small" 
-                    sx={{ 
-                      height: 20, 
-                      fontSize: '0.65rem',
-                      backgroundColor: mode === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)',
-                      color: mode === 'light' ? 'inherit' : '#e0e0e0'
-                    }} 
+                <TableCell sx={cellSx}>
+                  <Chip label={pod.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
+                </TableCell>
+                <TableCell sx={cellSx}>
+                  <StatusChip status={pod.status} />
+                </TableCell>
+                <TableCell align="right" sx={cellSx}>
+                  <Tooltip title="Restarts across containers" arrow>
+                    <Box
+                      component="span"
+                      sx={{
+                        fontWeight: (pod.restarts || 0) > 0 ? 600 : 400,
+                        color:
+                          (pod.restarts || 0) > 10 ? 'error.main' : (pod.restarts || 0) > 0 ? 'warning.main' : 'text.primary',
+                      }}
+                    >
+                      {pod.restarts ?? 0}
+                    </Box>
+                  </Tooltip>
+                </TableCell>
+                <TableCell sx={cellSx}>
+                  <UsageBar
+                    percent={pod.cpuPercent}
+                    caption={pod.cpuUsage}
+                    tooltip={cpuTooltip(pod)}
+                    fallbackText={pod.cpuUsage}
+                    height={4}
                   />
                 </TableCell>
-                <TableCell 
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.status,
-                    maxWidth: columnWidths.status
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    {getStatusIcon(pod.status)}
-                    <Box component="span" sx={{ ml: 0.5 }}>
-                      {pod.status}
-                    </Box>
-                  </Box>
+                <TableCell sx={cellSx}>
+                  <UsageBar
+                    percent={pod.memoryPercent}
+                    caption={pod.memoryUsage}
+                    tooltip={memTooltip(pod)}
+                    fallbackText={pod.memoryUsage}
+                    height={4}
+                  />
                 </TableCell>
-                <TableCell 
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.helmChart,
-                    maxWidth: columnWidths.helmChart,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title={pod.helmChart || '-'}
-                >
-                  {pod.helmChart || '-'}
-                </TableCell>
-                <TableCell 
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.helmVersion,
-                    maxWidth: columnWidths.helmVersion
-                  }}
-                >
-                  {pod.helmVersion || '-'}
-                </TableCell>
-                <TableCell 
-                  align="right"
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.cpuUsage,
-                    maxWidth: columnWidths.cpuUsage
-                  }}
-                >
-                  {pod.cpuUsage || '-'}
-                </TableCell>
-                <TableCell 
-                  align="right"
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.memoryUsage,
-                    maxWidth: columnWidths.memoryUsage
-                  }}
-                >
-                  {pod.memoryUsage || '-'}
-                </TableCell>
-                <TableCell 
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.nodeName,
-                    maxWidth: columnWidths.nodeName,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title={pod.nodeName}
-                >
+                <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pod.nodeName}>
                   {pod.nodeName}
                 </TableCell>
-                <TableCell 
-                  sx={{ 
-                    py: 0.5, 
-                    px: 1, 
-                    fontSize: '0.75rem', 
-                    color: mode === 'light' ? 'inherit' : '#e0e0e0',
-                    width: columnWidths.age,
-                    maxWidth: columnWidths.age
-                  }}
-                >
-                  {pod.creationTimestamp}
-                </TableCell>
+                <TableCell sx={cellSx}>{pod.creationTimestamp}</TableCell>
               </TableRow>
             ))}
             {sortedPods.length === 0 && (
               <TableRow>
-                <TableCell 
-                  colSpan={9} 
-                  align="center" 
-                  sx={{ 
-                    py: 2,
-                    color: mode === 'light' ? 'text.secondary' : '#a0a0a0'
-                  }}
-                >
+                <TableCell colSpan={headCells.length} align="center" sx={{ py: 2, color: 'text.secondary' }}>
                   No pods found
                   {searchQuery && ` matching "${searchQuery}"`}
                   {namespaceFilter !== 'all' && ` in namespace "${namespaceFilter}"`}
@@ -447,6 +296,13 @@ export default function PodsTable({ pods, cluster }: PodsTableProps) {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <PodDetailDrawer
+        pod={selectedPod}
+        cluster={cluster}
+        open={!!selectedPod}
+        onClose={() => setSelectedPod(null)}
+      />
     </>
   );
-} 
+}

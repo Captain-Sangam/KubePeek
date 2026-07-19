@@ -1,14 +1,30 @@
-'use server';
-
 import * as k8s from '@kubernetes/client-node';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
 import * as http from 'http';
-import * as url from 'url';
-import { Cluster, Node, Pod, NodeGroupInfo } from '../types/kubernetes';
-import { Options } from 'request';
+import {
+  Cluster,
+  Node,
+  Pod,
+  NodeGroupInfo,
+  PodDetail,
+  ContainerDetail,
+  ContainerStateInfo,
+  PodEvent,
+  SecretSummary,
+  SecretDetail,
+} from '../types/kubernetes';
+
+// Minimal shape of the options object passed to kc.applyToRequest / fetchWithoutCertValidation.
+// Replaces the removed `request` library's `Options` type.
+type RequestOpts = {
+  url: string;
+  method?: string;
+  json?: boolean;
+  headers?: Record<string, string>;
+};
 
 // Helper function to parse CPU values from Kubernetes format
 const parseCpuValue = (cpuStr: string): string => {
@@ -167,6 +183,53 @@ const formatNodeGroupMemory = (memStr: string): string => {
   
   // For larger values, round to the nearest integer
   return `${Math.round(gigabytes)}Gi`;
+};
+
+// Resolve a node's node-group name from its labels, covering the common
+// managed-Kubernetes conventions. Operates on raw node labels.
+const resolveNodeGroupName = (labels: Record<string, string> | undefined): string => {
+  if (!labels) return 'default';
+  return (
+    labels['eks.amazonaws.com/nodegroup'] || // EKS
+    labels['kops.k8s.io/instancegroup'] || // kOps
+    labels['cloud.google.com/gke-nodepool'] || // GKE
+    labels['agentpool'] || // AKS
+    'default'
+  );
+};
+
+// Sum CPU/memory requests and limits across a set of containers.
+// Returns cores (CPU) and bytes (memory) as numbers.
+const sumPodResources = (
+  containers: k8s.V1Container[] | undefined
+): { cpuRequest: number; cpuLimit: number; memoryRequest: number; memoryLimit: number } => {
+  const totals = { cpuRequest: 0, cpuLimit: 0, memoryRequest: 0, memoryLimit: 0 };
+  if (!containers) return totals;
+  for (const c of containers) {
+    const req = c.resources?.requests;
+    const lim = c.resources?.limits;
+    if (req?.['cpu']) totals.cpuRequest += parseFloat(parseCpuValue(req['cpu']));
+    if (lim?.['cpu']) totals.cpuLimit += parseFloat(parseCpuValue(lim['cpu']));
+    if (req?.['memory']) totals.memoryRequest += parseFloat(parseMemoryValue(req['memory']));
+    if (lim?.['memory']) totals.memoryLimit += parseFloat(parseMemoryValue(lim['memory']));
+  }
+  return totals;
+};
+
+// Compute a usage percentage against the applicable denominator following the
+// limit -> request -> node-allocatable fallback chain. Returns null when no
+// denominator is available so callers can render plain text instead of a bar.
+const computeUsagePercent = (
+  usage: number,
+  limit: number,
+  request: number,
+  allocatable: number
+): { percent: number; basis: 'limit' | 'request' | 'allocatable' | 'none' } => {
+  const denom = limit > 0 ? limit : request > 0 ? request : allocatable > 0 ? allocatable : 0;
+  const basis =
+    limit > 0 ? 'limit' : request > 0 ? 'request' : allocatable > 0 ? 'allocatable' : 'none';
+  if (denom <= 0) return { percent: 0, basis: 'none' };
+  return { percent: Math.min(Math.round((usage / denom) * 100), 100), basis };
 };
 
 // Get the kubeconfig file path
@@ -389,57 +452,54 @@ export const getClientForCluster = (clusterName: string): {
       throw new Error('No current cluster or user found');
     }
     
+    // Shared metrics fetch: builds the auth options, applies the kubeconfig
+    // credentials (awaited — exec-auth tokens are resolved asynchronously), and
+    // fetches over the cert-tolerant transport. Returns parsed JSON.
+    const metricsGet = async (apiPath: string): Promise<any> => {
+      const targetUrl = `${cluster.server}${apiPath}`;
+      const opts: RequestOpts = { url: targetUrl, method: 'GET', json: true };
+      await kc.applyToRequest(opts as any);
+
+      console.log(`Fetching metrics from ${targetUrl}`);
+      const response = await fetchWithoutCertValidation(targetUrl, opts);
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.statusText} (${response.status})`);
+      }
+      return response.json();
+    };
+
     // Create a simple metrics client with the required methods
     metricsClient = {
       getNodeMetrics: async () => {
         try {
-          // Use request library directly instead of the client
-          const opts: Options = {
-            url: `${cluster.server}/apis/metrics.k8s.io/v1beta1/nodes`,
-            method: 'GET',
-            json: true
-          }; 
-          kc.applyToRequest(opts);
-          
-          // Use our custom fetch function with SSL options
-          console.log(`Fetching node metrics from ${cluster.server}/apis/metrics.k8s.io/v1beta1/nodes`);
-          const response = await fetchWithoutCertValidation(`${cluster.server}/apis/metrics.k8s.io/v1beta1/nodes`, opts);
-          
-          if (!response.ok) {
-            throw new Error(`API request failed: ${response.statusText} (${response.status})`);
-          }
-          
-          const data = await response.json();
+          const data = await metricsGet('/apis/metrics.k8s.io/v1beta1/nodes');
           return { body: data };
         } catch (err) {
           console.error('Error fetching node metrics directly:', err);
           return { body: { items: [] } };
         }
       },
-      
+
       getPodMetrics: async () => {
         try {
-          // Use request library directly instead of the client
-          const opts: Options = {
-            url: `${cluster.server}/apis/metrics.k8s.io/v1beta1/pods`,
-            method: 'GET',
-            json: true
-          };
-          kc.applyToRequest(opts);
-          
-          // Use our custom fetch function with SSL options
-          console.log(`Fetching pod metrics from ${cluster.server}/apis/metrics.k8s.io/v1beta1/pods`);
-          const response = await fetchWithoutCertValidation(`${cluster.server}/apis/metrics.k8s.io/v1beta1/pods`, opts);
-          
-          if (!response.ok) {
-            throw new Error(`API request failed: ${response.statusText} (${response.status})`);
-          }
-          
-          const data = await response.json();
+          const data = await metricsGet('/apis/metrics.k8s.io/v1beta1/pods');
           return { body: data };
         } catch (err) {
           console.error('Error fetching pod metrics directly:', err);
           return { body: { items: [] } };
+        }
+      },
+
+      getPodMetricsForPod: async (namespace: string, podName: string) => {
+        try {
+          const data = await metricsGet(
+            `/apis/metrics.k8s.io/v1beta1/namespaces/${namespace}/pods/${podName}`
+          );
+          return { body: data };
+        } catch (err) {
+          console.error(`Error fetching metrics for pod ${namespace}/${podName}:`, err);
+          return { body: null };
         }
       }
     };
@@ -447,20 +507,9 @@ export const getClientForCluster = (clusterName: string): {
     console.error('Error creating metrics client:', error);
     // Create a dummy metrics client with methods that return empty data
     metricsClient = {
-      getNodeMetrics: async () => {
-        return {
-          body: {
-            items: []
-          }
-        };
-      },
-      getPodMetrics: async () => {
-        return {
-          body: {
-            items: []
-          }
-        };
-      }
+      getNodeMetrics: async () => ({ body: { items: [] } }),
+      getPodMetrics: async () => ({ body: { items: [] } }),
+      getPodMetricsForPod: async () => ({ body: null })
     };
   }
   
@@ -556,6 +605,10 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
           name: node.metadata?.name || 'unknown',
           instanceType,
           tags,
+          nodeGroup: resolveNodeGroupName(node.metadata?.labels),
+          createdAt: node.metadata?.creationTimestamp
+            ? new Date(node.metadata.creationTimestamp).toISOString()
+            : '',
           capacity: {
             cpu: formatCpuForDisplay(parsedCpuCapacity),
             memory: formatMemoryForDisplay(parsedMemCapacity)
@@ -577,6 +630,10 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
           name: node.metadata?.name || 'unknown',
           instanceType: 'unknown',
           tags: {},
+          nodeGroup: resolveNodeGroupName(node.metadata?.labels),
+          createdAt: node.metadata?.creationTimestamp
+            ? new Date(node.metadata.creationTimestamp).toISOString()
+            : '',
           capacity: { cpu: '0', memory: '0' },
           allocatable: { cpu: '0', memory: '0' },
           usage: { cpu: '0', memory: '0' },
@@ -602,29 +659,9 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
     const nodeGroups = new Map<string, NodeGroupInfo>();
     
     nodes.forEach(node => {
-      // Extract a node group from specific labels
-      // This looks for common node group designations in different Kubernetes setups
-      let nodeGroupName = 'default';
-      
-      if (node.tags) {
-        // For EKS
-        if (node.tags['eks.amazonaws.com/nodegroup']) {
-          nodeGroupName = node.tags['eks.amazonaws.com/nodegroup'];
-        }
-        // For kOps
-        else if (node.tags['kops.k8s.io/instancegroup']) {
-          nodeGroupName = node.tags['kops.k8s.io/instancegroup'];
-        }
-        // For GKE
-        else if (node.tags['cloud.google.com/gke-nodepool']) {
-          nodeGroupName = node.tags['cloud.google.com/gke-nodepool'];
-        }
-        // For AKS
-        else if (node.tags['agentpool']) {
-          nodeGroupName = node.tags['agentpool'];
-        }
-      }
-      
+      // Node group is already resolved per-node in getNodes().
+      const nodeGroupName = node.nodeGroup || 'default';
+
       // Get or create node group
       let nodeGroup = nodeGroups.get(nodeGroupName);
       if (!nodeGroup) {
@@ -641,9 +678,16 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
         };
         nodeGroups.set(nodeGroupName, nodeGroup);
       }
-      
+
       // Add node to group
       nodeGroup.nodes.push(node);
+
+      // Track the oldest node in the group (earliest creation timestamp).
+      if (node.createdAt) {
+        if (!nodeGroup.oldestNodeCreatedAt || node.createdAt < nodeGroup.oldestNodeCreatedAt) {
+          nodeGroup.oldestNodeCreatedAt = node.createdAt;
+        }
+      }
       
       try {
         // Get CPU capacity and usage from node data
@@ -734,39 +778,43 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
   try {
     console.log(`Getting clients for cluster: ${clusterName}`);
     const { coreClient, metricsClient } = getClientForCluster(clusterName);
-    
-    // Get pods
-    console.log('Fetching pods...');
-    const podsResponse = await coreClient.listPodForAllNamespaces();
+
+    // Fetch pods, nodes, and pod metrics in parallel. Metrics never throws
+    // (the client swallows failures into empty data).
+    console.log('Fetching pods, nodes, and metrics...');
+    const [podsResponse, nodesResponse, metricsResponse] = await Promise.all([
+      coreClient.listPodForAllNamespaces(),
+      coreClient.listNode(),
+      metricsClient.getPodMetrics()
+    ]);
+
     const pods = podsResponse.body.items;
     console.log(`Successfully fetched ${pods.length} pods`);
-    
-    // Get pod metrics
-    console.log('Fetching pod metrics...');
-    let podMetrics: { 
-      items?: Array<{ 
-        metadata?: { 
-          name?: string; 
-          namespace?: string 
-        }; 
-        containers?: Array<{ 
-          usage?: { 
-            cpu?: string; 
-            memory?: string 
-          } 
-        }> 
-      }> 
-    } = { items: [] };
-    
-    try {
-      const metricsResponse = await metricsClient.getPodMetrics();
-      podMetrics = metricsResponse.body;
-      console.log(`Successfully fetched metrics for ${podMetrics.items?.length || 0} pods`);
-    } catch (metricsError) {
-      console.error('Error fetching pod metrics:', metricsError);
-      console.log('Continuing without pod metrics data');
+
+    // Build a lookup of node -> { nodeGroup, allocatable } so each pod can
+    // resolve its node group and a fallback usage denominator.
+    const nodeInfoByName = new Map<
+      string,
+      { nodeGroup: string; cpuAllocatable: number; memAllocatable: number }
+    >();
+    for (const node of nodesResponse.body.items) {
+      const name = node.metadata?.name;
+      if (!name) continue;
+      nodeInfoByName.set(name, {
+        nodeGroup: resolveNodeGroupName(node.metadata?.labels),
+        cpuAllocatable: parseFloat(parseCpuValue(node.status?.allocatable?.['cpu'] || '0')),
+        memAllocatable: parseFloat(parseMemoryValue(node.status?.allocatable?.['memory'] || '0'))
+      });
     }
-    
+
+    const podMetrics: {
+      items?: Array<{
+        metadata?: { name?: string; namespace?: string };
+        containers?: Array<{ usage?: { cpu?: string; memory?: string } }>;
+      }>;
+    } = metricsResponse.body || { items: [] };
+    console.log(`Successfully fetched metrics for ${podMetrics.items?.length || 0} pods`);
+
     const podItems = podMetrics.items || [];
     
     return pods.map(pod => {
@@ -802,7 +850,34 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
         // Format CPU and memory usage for display
         const cpuUsageFormatted = formatCpuForDisplay(totalCpuUsage.toString());
         const memoryUsageFormatted = formatMemoryForDisplay(totalMemoryUsage.toString());
-        
+
+        // Restart count: sum across all container statuses.
+        const restarts = (pod.status?.containerStatuses || []).reduce(
+          (sum, cs) => sum + (cs.restartCount || 0),
+          0
+        );
+
+        // Aggregate requests/limits across containers.
+        const res = sumPodResources(pod.spec?.containers);
+
+        // Resolve node group + allocatable fallback from the pod's node.
+        const nodeInfo = pod.spec?.nodeName
+          ? nodeInfoByName.get(pod.spec.nodeName)
+          : undefined;
+
+        const cpuUsagePct = computeUsagePercent(
+          totalCpuUsage,
+          res.cpuLimit,
+          res.cpuRequest,
+          nodeInfo?.cpuAllocatable || 0
+        );
+        const memUsagePct = computeUsagePercent(
+          totalMemoryUsage,
+          res.memoryLimit,
+          res.memoryRequest,
+          nodeInfo?.memAllocatable || 0
+        );
+
         // Extract Helm information from labels
         const labels = pod.metadata?.labels || {};
         const helmChart = labels['app.kubernetes.io/name'] || 
@@ -847,7 +922,20 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
           cpuUsage: cpuUsageFormatted,
           memoryUsage: memoryUsageFormatted,
           nodeName: pod.spec?.nodeName || 'unknown',
-          creationTimestamp: age
+          nodeGroup: nodeInfo?.nodeGroup || 'unknown',
+          creationTimestamp: age,
+          createdAt: creationTime,
+          restarts,
+          cpuRequest: res.cpuRequest > 0 ? formatCpuForDisplay(res.cpuRequest.toString()) : undefined,
+          cpuLimit: res.cpuLimit > 0 ? formatCpuForDisplay(res.cpuLimit.toString()) : undefined,
+          memoryRequest:
+            res.memoryRequest > 0 ? formatMemoryForDisplay(res.memoryRequest.toString()) : undefined,
+          memoryLimit:
+            res.memoryLimit > 0 ? formatMemoryForDisplay(res.memoryLimit.toString()) : undefined,
+          cpuPercent: cpuUsagePct.basis === 'none' ? null : cpuUsagePct.percent,
+          memoryPercent: memUsagePct.basis === 'none' ? null : memUsagePct.percent,
+          cpuBasis: cpuUsagePct.basis,
+          memoryBasis: memUsagePct.basis
         };
       } catch (podError) {
         console.error(`Error processing pod ${pod.metadata?.name}:`, podError);
@@ -859,7 +947,11 @@ export const getPods = async (clusterName: string): Promise<Pod[]> => {
           cpuUsage: '0m',
           memoryUsage: '0Mi',
           nodeName: pod.spec?.nodeName || 'unknown',
-          creationTimestamp: 'unknown'
+          nodeGroup: 'unknown',
+          creationTimestamp: 'unknown',
+          restarts: 0,
+          cpuPercent: null,
+          memoryPercent: null
         };
       }
     });
@@ -887,14 +979,16 @@ export const deletePod = async (clusterName: string, namespace: string, podName:
 
 // Get pod logs
 export const getPodLogs = async (
-  clusterName: string, 
-  namespace: string, 
+  clusterName: string,
+  namespace: string,
   podName: string,
   containerName?: string,
-  tailLines?: number
+  tailLines?: number,
+  timestamps: boolean = true,
+  previous: boolean = false
 ): Promise<{ success: boolean; logs?: string; message?: string }> => {
-  console.log(`kubernetes-server: Getting logs for pod ${namespace}/${podName} in cluster ${clusterName}`, 
-    { containerName, tailLines });
+  console.log(`kubernetes-server: Getting logs for pod ${namespace}/${podName} in cluster ${clusterName}`,
+    { containerName, tailLines, timestamps, previous });
   
   try {
     if (!clusterName || !namespace || !podName) {
@@ -942,12 +1036,17 @@ export const getPodLogs = async (
         try {
           console.log(`kubernetes-server: Fetching logs for container ${container}`);
           const { body } = await coreClient.readNamespacedPodLog(
-            podName, 
-            namespace, 
+            podName,
+            namespace,
             container,
-            undefined, // pretty
             undefined, // follow
-            tailLines
+            undefined, // insecureSkipTLSVerifyBackend
+            undefined, // limitBytes
+            undefined, // pretty
+            previous, // previous
+            undefined, // sinceSeconds
+            tailLines, // tailLines
+            timestamps // timestamps
           );
           allLogs += `\n--- Container: ${container} ---\n${body}\n`;
         } catch (containerError) {
@@ -963,14 +1062,19 @@ export const getPodLogs = async (
     // Get logs for a specific container
     console.log(`kubernetes-server: Fetching logs for specific container ${containerName}`);
     const { body } = await coreClient.readNamespacedPodLog(
-      podName, 
-      namespace, 
+      podName,
+      namespace,
       containerName,
-      undefined, // pretty
       undefined, // follow
-      tailLines
+      undefined, // insecureSkipTLSVerifyBackend
+      undefined, // limitBytes
+      undefined, // pretty
+      previous, // previous
+      undefined, // sinceSeconds
+      tailLines, // tailLines
+      timestamps // timestamps
     );
-    
+
     return { success: true, logs: body };
   } catch (error) {
     console.error(`Error getting logs for pod ${namespace}/${podName}:`, error);
@@ -1006,217 +1110,352 @@ export const getPodLogs = async (
   }
 };
 
-// Get pod details (describe pod equivalent)
-export const getPodDetails = async (
-  clusterName: string, 
-  namespace: string, 
+// Map a V1ContainerState to our normalized ContainerStateInfo.
+const mapContainerState = (state: k8s.V1ContainerState | undefined): ContainerStateInfo => {
+  if (!state) return { type: 'unknown' };
+  if (state.running) {
+    return {
+      type: 'running',
+      startedAt: state.running.startedAt
+        ? new Date(state.running.startedAt).toISOString()
+        : undefined
+    };
+  }
+  if (state.waiting) {
+    return { type: 'waiting', reason: state.waiting.reason, message: state.waiting.message };
+  }
+  if (state.terminated) {
+    return {
+      type: 'terminated',
+      reason: state.terminated.reason,
+      message: state.terminated.message,
+      exitCode: state.terminated.exitCode,
+      startedAt: state.terminated.startedAt
+        ? new Date(state.terminated.startedAt).toISOString()
+        : undefined,
+      finishedAt: state.terminated.finishedAt
+        ? new Date(state.terminated.finishedAt).toISOString()
+        : undefined
+    };
+  }
+  return { type: 'unknown' };
+};
+
+// Build a ContainerDetail from a container spec + its status + live usage.
+const buildContainerDetail = (
+  spec: k8s.V1Container,
+  status: k8s.V1ContainerStatus | undefined,
+  isInit: boolean,
+  usage: { cpu?: string; memory?: string } | undefined
+): ContainerDetail => {
+  const requests = spec.resources?.requests || {};
+  const limits = spec.resources?.limits || {};
+  return {
+    name: spec.name,
+    image: spec.image || status?.image || '',
+    ready: status?.ready || false,
+    isInit,
+    restartCount: status?.restartCount || 0,
+    state: mapContainerState(status?.state),
+    lastState: status?.lastState ? mapContainerState(status.lastState) : undefined,
+    requests: {
+      cpu: requests['cpu'] ? formatCpuForDisplay(parseCpuValue(requests['cpu'])) : undefined,
+      memory: requests['memory']
+        ? formatMemoryForDisplay(parseMemoryValue(requests['memory']))
+        : undefined
+    },
+    limits: {
+      cpu: limits['cpu'] ? formatCpuForDisplay(parseCpuValue(limits['cpu'])) : undefined,
+      memory: limits['memory']
+        ? formatMemoryForDisplay(parseMemoryValue(limits['memory']))
+        : undefined
+    },
+    usage: usage
+      ? {
+          cpu: formatCpuForDisplay(parseCpuValue(usage.cpu || '0')),
+          memory: formatMemoryForDisplay(parseMemoryValue(usage.memory || '0'))
+        }
+      : undefined
+  };
+};
+
+// Determine the "type" of a volume from the first non-name key present.
+const volumeType = (vol: k8s.V1Volume): string => {
+  const keys = Object.keys(vol).filter(k => k !== 'name' && (vol as any)[k] != null);
+  return keys[0] || 'unknown';
+};
+
+// Compute a relative age string from an ISO timestamp.
+const relativeAge = (iso: string): string => {
+  if (!iso) return 'unknown';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diffMs / 86400000);
+  const hours = Math.floor((diffMs % 86400000) / 3600000);
+  const mins = Math.floor((diffMs % 3600000) / 60000);
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  if (mins > 0) return `${mins}m`;
+  return `${Math.max(0, Math.floor(diffMs / 1000))}s`;
+};
+
+// Get structured pod detail (Lens-like).
+export const getPodDetail = async (
+  clusterName: string,
+  namespace: string,
   podName: string
-): Promise<{ success: boolean; details?: any; message?: string }> => {
-  console.log(`kubernetes-server: Getting details for pod ${namespace}/${podName} in cluster ${clusterName}`);
-  
+): Promise<{ success: boolean; detail?: PodDetail; message?: string }> => {
   try {
     if (!clusterName || !namespace || !podName) {
-      console.error('Missing required parameters:', { clusterName, namespace, podName });
-      return { 
-        success: false, 
-        message: `Missing required parameters: ${!clusterName ? 'cluster' : ''} ${!namespace ? 'namespace' : ''} ${!podName ? 'podName' : ''}`.trim()
-      };
+      return { success: false, message: 'Missing required parameters' };
     }
-    
-    const { coreClient } = getClientForCluster(clusterName);
-    
-    console.log(`kubernetes-server: Calling readNamespacedPod for ${namespace}/${podName}`);
-    const { body: pod } = await coreClient.readNamespacedPod(podName, namespace);
-    console.log(`kubernetes-server: Successfully fetched pod details for ${namespace}/${podName}`);
-    
-    return { success: true, details: pod };
-  } catch (error) {
-    console.error(`Error getting details for pod ${namespace}/${podName}:`, error);
-    let errorMessage = 'Unknown error occurred while fetching pod details';
-    let statusCode;
-    
-    // Handle specific kubernetes client errors
-    if (error && typeof error === 'object' && 'response' in error && 
-        error.response && typeof error.response === 'object' && 
-        'statusCode' in error.response) {
-      statusCode = error.response.statusCode;
-      
-      if (statusCode === 404) {
-        errorMessage = `Pod ${namespace}/${podName} not found`;
-      } else if (statusCode === 403) {
-        errorMessage = `Access denied for pod ${namespace}/${podName}`;
-      } else {
-        errorMessage = `Kubernetes API error (${statusCode}): ${
-          'body' in error.response && error.response.body && 
-          typeof error.response.body === 'object' && 
-          'message' in error.response.body 
-            ? error.response.body.message 
-            : 'Unknown error'
-        }`;
+
+    const { coreClient, metricsClient } = getClientForCluster(clusterName);
+
+    const [podResp, metricsResp, nodesResp] = await Promise.all([
+      coreClient.readNamespacedPod(podName, namespace),
+      metricsClient.getPodMetricsForPod(namespace, podName),
+      coreClient.listNode()
+    ]);
+
+    const pod = podResp.body;
+    const metrics = metricsResp.body as
+      | { containers?: Array<{ name?: string; usage?: { cpu?: string; memory?: string } }> }
+      | null;
+
+    // Live usage per container, keyed by container name.
+    const usageByContainer = new Map<string, { cpu?: string; memory?: string }>();
+    if (metrics?.containers) {
+      for (const c of metrics.containers) {
+        if (c.name) usageByContainer.set(c.name, c.usage || {});
       }
-    } else if (error instanceof Error) {
-      errorMessage = error.message;
     }
-    
-    return { 
-      success: false, 
-      message: errorMessage
+
+    const statusByName = new Map<string, k8s.V1ContainerStatus>();
+    (pod.status?.containerStatuses || []).forEach(s => statusByName.set(s.name, s));
+    const initStatusByName = new Map<string, k8s.V1ContainerStatus>();
+    (pod.status?.initContainerStatuses || []).forEach(s => initStatusByName.set(s.name, s));
+
+    const containers: ContainerDetail[] = (pod.spec?.containers || []).map(spec =>
+      buildContainerDetail(spec, statusByName.get(spec.name), false, usageByContainer.get(spec.name))
+    );
+    const initContainers: ContainerDetail[] = (pod.spec?.initContainers || []).map(spec =>
+      buildContainerDetail(
+        spec,
+        initStatusByName.get(spec.name),
+        true,
+        usageByContainer.get(spec.name)
+      )
+    );
+
+    // Aggregate pod-level usage + limits/requests for the drawer bars.
+    let totalCpuUsage = 0;
+    let totalMemUsage = 0;
+    usageByContainer.forEach(u => {
+      totalCpuUsage += parseFloat(parseCpuValue(u.cpu || '0'));
+      totalMemUsage += parseFloat(parseMemoryValue(u.memory || '0'));
+    });
+    const res = sumPodResources(pod.spec?.containers);
+
+    const nodeName = pod.spec?.nodeName || '';
+    const node = nodesResp.body.items.find(n => n.metadata?.name === nodeName);
+    const cpuAllocatable = parseFloat(parseCpuValue(node?.status?.allocatable?.['cpu'] || '0'));
+    const memAllocatable = parseFloat(
+      parseMemoryValue(node?.status?.allocatable?.['memory'] || '0')
+    );
+    const cpuPct = computeUsagePercent(totalCpuUsage, res.cpuLimit, res.cpuRequest, cpuAllocatable);
+    const memPct = computeUsagePercent(totalMemUsage, res.memoryLimit, res.memoryRequest, memAllocatable);
+
+    const restarts = (pod.status?.containerStatuses || []).reduce(
+      (sum, cs) => sum + (cs.restartCount || 0),
+      0
+    );
+    const createdAt = pod.metadata?.creationTimestamp
+      ? new Date(pod.metadata.creationTimestamp).toISOString()
+      : '';
+
+    const detail: PodDetail = {
+      name: pod.metadata?.name || podName,
+      namespace: pod.metadata?.namespace || namespace,
+      phase: pod.status?.phase || 'Unknown',
+      qosClass: pod.status?.qosClass,
+      nodeName,
+      nodeGroup: node ? resolveNodeGroupName(node.metadata?.labels) : undefined,
+      podIP: pod.status?.podIP,
+      hostIP: pod.status?.hostIP,
+      createdAt,
+      startTime: pod.status?.startTime ? new Date(pod.status.startTime).toISOString() : undefined,
+      age: relativeAge(createdAt),
+      restartPolicy: pod.spec?.restartPolicy,
+      serviceAccountName: pod.spec?.serviceAccountName,
+      restarts,
+      cpuUsage: formatCpuForDisplay(totalCpuUsage.toString()),
+      memoryUsage: formatMemoryForDisplay(totalMemUsage.toString()),
+      cpuPercent: cpuPct.basis === 'none' ? null : cpuPct.percent,
+      memoryPercent: memPct.basis === 'none' ? null : memPct.percent,
+      cpuBasis: cpuPct.basis,
+      memoryBasis: memPct.basis,
+      labels: pod.metadata?.labels || {},
+      annotations: pod.metadata?.annotations || {},
+      ownerReferences: (pod.metadata?.ownerReferences || []).map(o => ({
+        kind: o.kind,
+        name: o.name,
+        controller: o.controller
+      })),
+      conditions: (pod.status?.conditions || []).map(c => ({
+        type: c.type,
+        status: c.status,
+        reason: c.reason,
+        message: c.message,
+        lastTransitionTime: c.lastTransitionTime
+          ? new Date(c.lastTransitionTime).toISOString()
+          : undefined
+      })),
+      tolerations: (pod.spec?.tolerations || []).map(t => ({
+        key: t.key,
+        operator: t.operator,
+        value: t.value,
+        effect: t.effect,
+        tolerationSeconds: t.tolerationSeconds
+      })),
+      volumes: (pod.spec?.volumes || []).map(v => ({ name: v.name, type: volumeType(v) })),
+      containers,
+      initContainers
+    };
+
+    return { success: true, detail };
+  } catch (error) {
+    console.error(`Error getting detail for pod ${namespace}/${podName}:`, error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error fetching pod detail'
     };
   }
 };
 
-// Get pod details using kubectl command (fallback method)
-export const getPodDetailsUsingKubectl = async (
-  clusterName: string, 
-  namespace: string, 
+// List events for a specific pod.
+export const getPodEvents = async (
+  clusterName: string,
+  namespace: string,
   podName: string
-): Promise<{ success: boolean; details?: any; message?: string; rawOutput?: string }> => {
+): Promise<{ success: boolean; events?: PodEvent[]; message?: string }> => {
   try {
-    // Set kubectl context to the specified cluster
-    const kc = loadKubeConfig();
-    try {
-      kc.setCurrentContext(clusterName);
-    } catch (error) {
-      console.error(`Failed to set context to ${clusterName}:`, error);
-      // Continue with the current context as a fallback
+    if (!clusterName || !namespace || !podName) {
+      return { success: false, message: 'Missing required parameters' };
     }
 
-    // Use child_process to run the kubectl command
-    const { exec } = require('child_process');
-    
-    return new Promise((resolve) => {
-      exec(`kubectl describe pod ${podName} -n ${namespace}`, (error: any, stdout: string, stderr: string) => {
-        if (error) {
-          console.error(`Error executing kubectl describe pod: ${error.message}`);
-          resolve({ 
-            success: false, 
-            message: `Failed to get pod details using kubectl: ${error.message}`
-          });
-          return;
-        }
-        
-        if (stderr) {
-          console.error(`kubectl stderr: ${stderr}`);
-          resolve({ 
-            success: false, 
-            message: `kubectl error: ${stderr}`
-          });
-          return;
-        }
-        
-        // Parse the kubectl output into a structured format
-        const details = parseKubectlDescribeOutput(stdout);
-        
-        resolve({ 
-          success: true, 
-          details,
-          rawOutput: stdout // Include the raw output for display
-        });
-      });
+    const { coreClient } = getClientForCluster(clusterName);
+
+    // fieldSelector is the 5th positional arg on listNamespacedEvent in v0.20.
+    const { body } = await coreClient.listNamespacedEvent(
+      namespace,
+      undefined, // pretty
+      undefined, // allowWatchBookmarks
+      undefined, // _continue
+      `involvedObject.name=${podName},involvedObject.namespace=${namespace}`
+    );
+
+    const events: PodEvent[] = body.items.map(e => {
+      const last =
+        e.lastTimestamp || e.eventTime || e.metadata?.creationTimestamp || '';
+      const first = e.firstTimestamp || e.eventTime || e.metadata?.creationTimestamp || '';
+      return {
+        type: e.type || 'Normal',
+        reason: e.reason || '',
+        message: e.message || '',
+        count: e.count || (e.series?.count ?? 1),
+        firstSeen: first ? new Date(first).toISOString() : '',
+        lastSeen: last ? new Date(last).toISOString() : '',
+        source: e.source?.component || e.reportingComponent || ''
+      };
     });
+
+    // Newest first.
+    events.sort((a, b) => (b.lastSeen || '').localeCompare(a.lastSeen || ''));
+
+    return { success: true, events };
   } catch (error) {
-    console.error(`Error getting pod details for ${namespace}/${podName} using kubectl:`, error);
-    return { 
-      success: false, 
-      message: error instanceof Error ? error.message : 'Unknown error occurred while fetching pod details'
+    console.error(`Error getting events for pod ${namespace}/${podName}:`, error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error fetching pod events'
     };
   }
 };
 
-// Helper function to parse kubectl describe pod output
-function parseKubectlDescribeOutput(output: string): any {
-  const details: any = {
-    metadata: {
-      name: '',
-      namespace: '',
-      labels: {},
-      annotations: {}
-    },
-    spec: {
-      containers: []
-    },
-    status: {
-      phase: '',
-      containerStatuses: []
-    },
-    rawOutput: output
-  };
-  
-  // Extract basic metadata
-  const nameMatch = output.match(/Name:\s+(.+)$/m);
-  if (nameMatch) details.metadata.name = nameMatch[1].trim();
-  
-  const namespaceMatch = output.match(/Namespace:\s+(.+)$/m);
-  if (namespaceMatch) details.metadata.namespace = namespaceMatch[1].trim();
-  
-  const statusMatch = output.match(/Status:\s+(.+)$/m);
-  if (statusMatch) details.status.phase = statusMatch[1].trim();
-  
-  // Extract labels
-  const labelsSection = output.match(/Labels:\s+([\s\S]+?)(?=Annotations:|Status:|$)/m);
-  if (labelsSection) {
-    const labelLines = labelsSection[1].trim().split('\n');
-    labelLines.forEach(line => {
-      const [key, value] = line.trim().split('=');
-      if (key && value) {
-        details.metadata.labels[key.trim()] = value.trim();
-      }
-    });
-  }
-  
-  // Extract annotations
-  const annotationsSection = output.match(/Annotations:\s+([\s\S]+?)(?=Status:|$)/m);
-  if (annotationsSection) {
-    const annotationLines = annotationsSection[1].trim().split('\n');
-    annotationLines.forEach(line => {
-      const parts = line.trim().split(':');
-      if (parts.length >= 2) {
-        const key = parts[0].trim();
-        const value = parts.slice(1).join(':').trim();
-        details.metadata.annotations[key] = value;
-      }
-    });
-  }
-  
-  // Extract container info
-  const containerSections = output.match(/Containers:([\s\S]+?)(?=Conditions:|Events:|$)/);
-  if (containerSections) {
-    const containersList = containerSections[1].split(/Container ID:/g);
-    
-    // Skip the first empty item if it exists
-    for (let i = 1; i < containersList.length; i++) {
-      const containerInfo = containersList[i];
-      const container: any = {
-        name: '',
-        state: 'unknown',
-        ready: false,
-        restartCount: 0,
-        image: ''
+// List secrets across namespaces (or one namespace). Values are NOT included.
+// Helm release secrets are excluded (surfaced by the Helm section instead).
+export const listSecrets = async (
+  clusterName: string,
+  namespace?: string
+): Promise<SecretSummary[]> => {
+  const { coreClient } = getClientForCluster(clusterName);
+
+  const resp = namespace
+    ? await coreClient.listNamespacedSecret(namespace)
+    : await coreClient.listSecretForAllNamespaces();
+
+  return resp.body.items
+    .filter(s => s.type !== 'helm.sh/release.v1')
+    .map(s => {
+      const keys = Object.keys(s.data || {});
+      const createdAt = s.metadata?.creationTimestamp
+        ? new Date(s.metadata.creationTimestamp).toISOString()
+        : '';
+      return {
+        name: s.metadata?.name || 'unknown',
+        namespace: s.metadata?.namespace || 'default',
+        type: s.type || 'Opaque',
+        keys,
+        keyCount: keys.length,
+        createdAt,
+        age: relativeAge(createdAt)
       };
-      
-      // Extract container name
-      const nameMatch = containerInfo.match(/^.*?\n\s+Name:\s+(.+)$/m);
-      if (nameMatch) container.name = nameMatch[1].trim();
-      
-      // Extract container image
-      const imageMatch = containerInfo.match(/Image:\s+(.+)$/m);
-      if (imageMatch) container.image = imageMatch[1].trim();
-      
-      // Extract container state
-      const stateMatch = containerInfo.match(/State:\s+(.+)$/m);
-      if (stateMatch) container.state = stateMatch[1].trim();
-      
-      // Extract ready state
-      const readyMatch = containerInfo.match(/Ready:\s+(.+)$/m);
-      if (readyMatch) container.ready = readyMatch[1].trim() === 'true';
-      
-      // Extract restart count
-      const restartMatch = containerInfo.match(/Restart Count:\s+(\d+)$/m);
-      if (restartMatch) container.restartCount = parseInt(restartMatch[1].trim(), 10);
-      
-      details.status.containerStatuses.push(container);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+// Get a single secret with base64-decoded values. Binary values are flagged
+// so the UI doesn't render mangled UTF-8.
+export const getSecretDetail = async (
+  clusterName: string,
+  namespace: string,
+  name: string
+): Promise<{ success: boolean; secret?: SecretDetail; message?: string }> => {
+  try {
+    const { coreClient } = getClientForCluster(clusterName);
+    const { body: s } = await coreClient.readNamespacedSecret(name, namespace);
+
+    const data: SecretDetail['data'] = {};
+    for (const [key, b64] of Object.entries(s.data || {})) {
+      const buf = Buffer.from(b64 as string, 'base64');
+      // Treat as binary if it contains NUL or a high proportion of control chars.
+      const isBinary = buf.includes(0) ||
+        buf.some(byte => byte < 9 || (byte > 13 && byte < 32));
+      data[key] = isBinary
+        ? { value: b64 as string, encoding: 'base64' }
+        : { value: buf.toString('utf8'), encoding: 'utf8' };
     }
+
+    const createdAt = s.metadata?.creationTimestamp
+      ? new Date(s.metadata.creationTimestamp).toISOString()
+      : '';
+
+    return {
+      success: true,
+      secret: {
+        name: s.metadata?.name || name,
+        namespace: s.metadata?.namespace || namespace,
+        type: s.type || 'Opaque',
+        createdAt,
+        labels: s.metadata?.labels,
+        data
+      }
+    };
+  } catch (error) {
+    console.error(`Error getting secret ${namespace}/${name}:`, error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error fetching secret'
+    };
   }
-  
-  return details;
-} 
+};
