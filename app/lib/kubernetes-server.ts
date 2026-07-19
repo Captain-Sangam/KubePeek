@@ -491,6 +491,18 @@ export const getClientForCluster = (clusterName: string): {
         }
       },
 
+      getPodMetricsForNamespace: async (namespace: string) => {
+        try {
+          const data = await metricsGet(
+            `/apis/metrics.k8s.io/v1beta1/namespaces/${namespace}/pods`
+          );
+          return { body: data };
+        } catch (err) {
+          console.error(`Error fetching pod metrics for namespace ${namespace}:`, err);
+          return { body: { items: [] } };
+        }
+      },
+
       getPodMetricsForPod: async (namespace: string, podName: string) => {
         try {
           const data = await metricsGet(
@@ -509,6 +521,7 @@ export const getClientForCluster = (clusterName: string): {
     metricsClient = {
       getNodeMetrics: async () => ({ body: { items: [] } }),
       getPodMetrics: async () => ({ body: { items: [] } }),
+      getPodMetricsForNamespace: async () => ({ body: { items: [] } }),
       getPodMetricsForPod: async () => ({ body: null })
     };
   }
@@ -773,22 +786,67 @@ export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[
   }
 };
 
-// Get pods for a cluster
-export const getPods = async (clusterName: string): Promise<Pod[]> => {
+// Get pods for a cluster, optionally scoped to a namespace, a single node, or
+// a node group. Exactly one scope key is expected; an empty scope lists all
+// pods (kept for back-compat). fieldSelector supports only ANDed equality, so
+// node-group scope fans out one call per member node.
+export interface PodScope {
+  namespace?: string;
+  nodeName?: string;
+  nodeGroup?: string;
+}
+
+export const getPods = async (
+  clusterName: string,
+  scope: PodScope = {}
+): Promise<Pod[]> => {
   try {
-    console.log(`Getting clients for cluster: ${clusterName}`);
+    console.log(`Getting clients for cluster: ${clusterName}`, scope);
     const { coreClient, metricsClient } = getClientForCluster(clusterName);
 
-    // Fetch pods, nodes, and pod metrics in parallel. Metrics never throws
-    // (the client swallows failures into empty data).
-    console.log('Fetching pods, nodes, and metrics...');
-    const [podsResponse, nodesResponse, metricsResponse] = await Promise.all([
-      coreClient.listPodForAllNamespaces(),
-      coreClient.listNode(),
-      metricsClient.getPodMetrics()
-    ]);
+    // Nodes are needed for node-group enrichment (and the fallback usage
+    // denominator) in every scope; the list is small.
+    const nodesResponse = await coreClient.listNode();
 
-    const pods = podsResponse.body.items;
+    // Resolve which pods to fetch based on scope.
+    let pods: k8s.V1Pod[];
+    if (scope.namespace) {
+      const resp = await coreClient.listNamespacedPod(scope.namespace);
+      pods = resp.body.items;
+    } else if (scope.nodeName) {
+      const resp = await coreClient.listPodForAllNamespaces(
+        undefined, // allowWatchBookmarks
+        undefined, // _continue
+        `spec.nodeName=${scope.nodeName}`
+      );
+      pods = resp.body.items;
+    } else if (scope.nodeGroup) {
+      const memberNodes = nodesResponse.body.items
+        .filter(n => resolveNodeGroupName(n.metadata?.labels) === scope.nodeGroup)
+        .map(n => n.metadata?.name)
+        .filter((n): n is string => Boolean(n));
+      if (memberNodes.length === 0) {
+        pods = [];
+      } else {
+        const responses = await Promise.all(
+          memberNodes.map(nodeName =>
+            coreClient.listPodForAllNamespaces(undefined, undefined, `spec.nodeName=${nodeName}`)
+          )
+        );
+        pods = responses.flatMap(r => r.body.items);
+      }
+    } else {
+      const resp = await coreClient.listPodForAllNamespaces();
+      pods = resp.body.items;
+    }
+
+    // Metrics: namespace scope can use the namespaced endpoint; node/nodeGroup
+    // scopes fall back to cluster-wide metrics (the metrics API has no node
+    // filter) and rely on the name+namespace match below to discard extras.
+    const metricsResponse = scope.namespace
+      ? await metricsClient.getPodMetricsForNamespace(scope.namespace)
+      : await metricsClient.getPodMetrics();
+
     console.log(`Successfully fetched ${pods.length} pods`);
 
     // Build a lookup of node -> { nodeGroup, allocatable } so each pod can
@@ -973,6 +1031,21 @@ export const deletePod = async (clusterName: string, namespace: string, podName:
     return { 
       success: false, 
       message: error instanceof Error ? error.message : 'Unknown error occurred while deleting pod'
+    };
+  }
+};
+
+// Delete a secret
+export const deleteSecret = async (clusterName: string, namespace: string, name: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const { coreClient } = getClientForCluster(clusterName);
+    await coreClient.deleteNamespacedSecret(name, namespace);
+    return { success: true, message: `Secret ${namespace}/${name} deleted successfully` };
+  } catch (error) {
+    console.error(`Error deleting secret ${namespace}/${name}:`, error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error occurred while deleting secret'
     };
   }
 };
@@ -1380,6 +1453,27 @@ export const getPodEvents = async (
       message: error instanceof Error ? error.message : 'Unknown error fetching pod events'
     };
   }
+};
+
+// True when an error looks like an expired/invalid credential (AWS SSO/VPN
+// session lapsed, exec-auth failed, or the API returned 401). Lets routes
+// surface a distinguishable 'auth_expired' instead of a generic 500 so the UI
+// can show a Reconnect button.
+export const isAuthError = (error: any): boolean => {
+  const status = error?.statusCode ?? error?.response?.statusCode ?? error?.code;
+  if (status === 401) return true;
+  const msg = String(error?.message || '');
+  return /unauthorized|expired|credential|get-token|exec/i.test(msg);
+};
+
+// List namespace names in the cluster, sorted.
+export const listNamespaces = async (clusterName: string): Promise<string[]> => {
+  const { coreClient } = getClientForCluster(clusterName);
+  const { body } = await coreClient.listNamespace();
+  return body.items
+    .map(ns => ns.metadata?.name || '')
+    .filter(Boolean)
+    .sort();
 };
 
 // List secrets across namespaces (or one namespace). Values are NOT included.

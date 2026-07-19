@@ -20,9 +20,10 @@ interface PodDetailDrawerProps {
   cluster: Cluster;
   open: boolean;
   onClose: () => void;
+  onDeleted?: () => void;
 }
 
-export default function PodDetailDrawer({ pod, cluster, open, onClose }: PodDetailDrawerProps) {
+export default function PodDetailDrawer({ pod, cluster, open, onClose, onDeleted }: PodDetailDrawerProps) {
   const [tab, setTab] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -42,9 +43,14 @@ export default function PodDetailDrawer({ pod, cluster, open, onClose }: PodDeta
     if (!pod || !base) return;
     setDeleting(true);
     try {
-      await fetch(`${base}/delete`, { method: 'DELETE' });
+      const res = await fetch(`${base}/delete`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.message || 'Failed to delete pod');
+      }
       setDeleteOpen(false);
       onClose();
+      onDeleted?.();
     } catch (err) {
       console.error('Delete pod failed:', err);
     } finally {

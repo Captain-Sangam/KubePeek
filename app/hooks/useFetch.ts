@@ -6,6 +6,9 @@ interface FetchState<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
+  // True when the request failed because the cluster credential expired
+  // (HTTP 401 / body { error: 'auth_expired' }). Drives the Reconnect banner.
+  authError: boolean;
   refetch: () => void;
 }
 
@@ -16,6 +19,7 @@ export function useFetch<T>(url: string | null): FetchState<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState(false);
   const [nonce, setNonce] = useState(0);
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
@@ -25,6 +29,7 @@ export function useFetch<T>(url: string | null): FetchState<T> {
       setData(null);
       setLoading(false);
       setError(null);
+      setAuthError(false);
       return;
     }
 
@@ -33,18 +38,23 @@ export function useFetch<T>(url: string | null): FetchState<T> {
 
     setLoading(true);
     setError(null);
+    setAuthError(false);
 
     fetch(url, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           let message = `Request failed (${res.status})`;
+          let auth = res.status === 401;
           try {
             const body = await res.json();
+            if (body?.error === 'auth_expired') auth = true;
             if (body?.message) message = body.message;
           } catch {
             // ignore parse errors
           }
-          throw new Error(message);
+          const err = new Error(auth ? 'auth_expired' : message);
+          (err as any).authError = auth;
+          throw err;
         }
         return res.json();
       })
@@ -56,6 +66,7 @@ export function useFetch<T>(url: string | null): FetchState<T> {
       })
       .catch((err) => {
         if (active && err.name !== 'AbortError') {
+          setAuthError(Boolean(err?.authError));
           setError(err instanceof Error ? err.message : 'Unknown error');
           setLoading(false);
         }
@@ -67,5 +78,5 @@ export function useFetch<T>(url: string | null): FetchState<T> {
     };
   }, [url, nonce]);
 
-  return { data, loading, error, refetch };
+  return { data, loading, error, authError, refetch };
 }

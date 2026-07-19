@@ -32,6 +32,11 @@ export default function PanelState({
     );
   }
 
+  // Auth errors are surfaced by the ReconnectBanner instead; don't double-report.
+  if (error === 'auth_expired') {
+    return null;
+  }
+
   if (error) {
     return (
       <Box sx={{ py: 3, px: 2 }}>

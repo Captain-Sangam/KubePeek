@@ -6,6 +6,15 @@ export interface Cluster {
   isActive?: boolean;
 }
 
+// Which resource view the sidebar has selected.
+export type ActiveView = 'nodeGroups' | 'nodes' | 'pods' | 'helm' | 'secrets';
+
+// The scope that gates the Pods view. Exactly one type is active at a time.
+export type PodsScope =
+  | { type: 'namespace'; value: string }
+  | { type: 'node'; value: string }
+  | { type: 'nodeGroup'; value: string };
+
 export interface Node {
   name: string;
   instanceType?: string;
