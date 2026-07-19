@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPodDetail } from '../../../../../../../lib/kubernetes-server';
+import { getPodEvents } from '../../../../../../../lib/kubernetes-server';
 
 export async function GET(
   request: NextRequest,
@@ -15,19 +15,16 @@ export async function GET(
       );
     }
 
-    const result = await getPodDetail(cluster, namespace, pod);
+    const result = await getPodEvents(cluster, namespace, pod);
 
     if (result.success) {
       return NextResponse.json(result);
     }
     return NextResponse.json(result, { status: 500 });
   } catch (error) {
-    console.error('Error in pod details API:', error);
+    console.error('Error in pod events API:', error);
     return NextResponse.json(
-      {
-        success: false,
-        message: error instanceof Error ? error.message : 'An error occurred'
-      },
+      { success: false, message: error instanceof Error ? error.message : 'An error occurred' },
       { status: 500 }
     );
   }

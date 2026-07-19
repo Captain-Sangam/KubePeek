@@ -18,32 +18,28 @@ Then visit http://localhost:3000 in your browser.
 
 - 📁 Effortlessly reads from your local Kubernetes configuration files
 - 🔍 Displays all the juicy details about your Kubernetes clusters
-- 🖥️ View node details including:
-  - Node group tags
-  - EC2 instance names and types
-  - CPU and RAM capacity and utilization
-  - Number of running pods
-- 🛰️ View pod details including:
-  - Helm chart name and version
-  - CPU and RAM usage
-  - Namespace and other metadata
-- 📊 Sortable tables for data organization that's actually pleasant
-- 🔄 Drill-down functionality from nodes to pods - click your way to enlightenment!
+- 🖥️ Node groups with per-node CPU/RAM usage and node start times
+- 🛰️ Pods with restart counts, CPU/RAM usage bars, and filters by namespace, node group, and node
+- 🔎 Pod detail drawer: status, per-container breakdown, events, and logs with a JSON fields filter
+- 🔐 Secrets — list and reveal decoded values on demand
+- ⎈ Helm — read-only releases with values, manifest, and revision history
+- 📊 Sortable tables and drill-down from nodes to pods
 
 ## Environment Variables
 
-- `KUBECONFIG` - (Optional) Path to kubeconfig file in the container. Defaults to `/home/node/.kube/config`.
+- `KUBECONFIG` - (Optional) Path to kubeconfig file in the container. Defaults to `/root/.kube/config`.
 
 ## Volume Mounts
 
-- Mount your Kubernetes config directory to `/home/node/.kube` in the container.
+- Mount your Kubernetes config directory to `/root/.kube` in the container.
+- For EKS, also mount `/root/.aws` for AWS credentials.
 
 ## Usage Examples
 
 ### Using a custom Kubernetes config file:
 
 ```bash
-docker run -d -p 3000:3000 --network="host" -v $HOME/.kube:/home/node/.kube -e KUBECONFIG=/home/node/.kube/config ajsangamithran/kubepeek:latest
+docker run -d -p 3000:3000 -v $HOME/.kube:/root/.kube -e KUBECONFIG=/root/.kube/config ajsangamithran/kubepeek:latest
 ```
 
 ### Changing the port:
