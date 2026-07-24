@@ -38,6 +38,7 @@ The project uses `@kubernetes/client-node` v0.20, whose list APIs take long **po
 ## Before opening a PR
 
 - `make typecheck` is clean
+- `npm run lint` is clean (next/core-web-vitals — this is the CI gate)
 - `make build` succeeds
 - If you touched cluster reads, verify against a real cluster (see the verification notes in the PR)
 

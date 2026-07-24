@@ -14,6 +14,7 @@
 - The frameless app window is **draggable via the top header**; the app now opens on the Pods view.
 
 ### Fixed (this round)
+- macOS app: closing the window left the app running with its server killed, so reopening from the Dock hung on a white window until force quit. Closing the window now quits the app. Related: the bundled server ran as a child that registered its own "exec" Dock icon and survived force quit as an orphan — it now runs as an Electron utility process (no Dock icon, dies with the app).
 - Pod logs could show a previously viewed pod's logs: the logs tab was reused across pod switches with no stale-response guard. Each pod now gets its own tab instance (`key` per pod), which also resets container/tail selections.
 
 ### Added (earlier)
