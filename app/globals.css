@@ -43,20 +43,14 @@ body {
 }
 
 /* Apply theme transitions to common elements */
-button, 
-a, 
-div, 
-span, 
-p, 
+button,
+a,
+div,
+span,
+p,
 h1, h2, h3, h4, h5, h6,
 th, td,
-svg,
-.MuiPaper-root,
-.MuiTypography-root,
-.MuiTableCell-root,
-.MuiIconButton-root,
-.MuiListItemText-root,
-.MuiTableSortLabel-root {
+svg {
   transition: var(--theme-transition);
 }
 
