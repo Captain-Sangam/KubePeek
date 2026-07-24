@@ -1,3 +1,7 @@
+@import '@astryxdesign/core/reset.css';
+@import '@astryxdesign/core/astryx.css';
+@import '@astryxdesign/theme-neutral/theme.css';
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

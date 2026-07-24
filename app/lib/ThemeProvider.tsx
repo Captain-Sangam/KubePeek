@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { Theme } from '@astryxdesign/core/theme';
+import { neutralTheme } from '@astryxdesign/theme-neutral/built';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -147,10 +149,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ mode, toggleTheme }}>
-      <MuiThemeProvider theme={theme}>
-        <CssBaseline />
-        {children}
-      </MuiThemeProvider>
+      <Theme theme={neutralTheme} mode={mode}>
+        {/* MUI provider stays nested until the component migration completes. */}
+        <MuiThemeProvider theme={theme}>
+          <CssBaseline />
+          {children}
+        </MuiThemeProvider>
+      </Theme>
     </ThemeContext.Provider>
   );
 } 
