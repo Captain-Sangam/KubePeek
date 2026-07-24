@@ -39,13 +39,16 @@ Prefer a container? See [Running with Docker](docs/development.md#running-with-d
 
 ## Features at a glance
 
+- **Tabbed views** — every sidebar item opens as a closable tab that keeps its own state; new tabs default to the last namespace you picked
 - **Two-part sidebar** — cluster selector on top; a Compute/Workloads nav tree below (collapses to an icon rail)
 - **Node groups** — CPU/RAM usage per node group and per member node, with node start times
 - **Pods** — scoped by namespace or node (never cluster-wide), restart counts, CPU/memory usage bars (% of limits → requests → node allocatable); delete with confirmation
 - **Pod detail drawer** — status, per-container breakdown, live metrics, events, and logs
-- **Logs** — timestamped, with a JSON fields filter (select which structured fields to show) and previous-container logs for crash loops
-- **Secrets** — scoped by namespace; reveal-all decoded values in a multi-column layout; delete with confirmation
-- **Helm** — read-only releases (scoped by namespace) with computed values, manifest, and revision history
+- **Logs** — timestamped and searchable, with a JSON fields filter (select which structured fields to show) and previous-container logs for crash loops
+- **Secrets** — scoped by namespace; TLS secrets tucked behind a checkbox; reveal-all decoded values in a searchable multi-column layout; delete with confirmation
+- **Helm** — read-only releases (scoped by namespace) with searchable computed values, manifest, and revision history
+- **Deployments, Ingresses & HPA** — namespace-scoped tables with replica readiness, hosts/addresses, and current-vs-target autoscaler metrics
+- **Cmd+F everywhere** — focuses the search box of whatever view, dialog, or drawer is in front
 - **One-click reconnect** — when an EKS/AWS token expires, a Reconnect button restores access without restarting
 
 See [docs/features.md](docs/features.md) for the full list.

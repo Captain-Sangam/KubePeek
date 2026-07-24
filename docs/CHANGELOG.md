@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- **Tabbed main pane**: every sidebar view opens as a closable tab (one per view). Open tabs keep their state (search, sort, namespace, data) when hidden; new namespace-scoped tabs seed from the last selected namespace; closing a tab resets its scope. Replaces the single-view switching and the redundant cluster-name header row.
+- **Deployments, Ingresses, and HPA views** under Workloads — namespace-scoped, searchable, sortable tables following the Secrets pattern (`autoscaling/v2` for HPA targets).
+- **Cmd/Ctrl+F** focuses the search box in the visible view — including new search boxes in pod logs (line filter), the secret detail dialog (key/value search), and the Helm drawer's Values/Manifest (grep-style line filter).
+- Secrets: **TLS secrets hidden by default** behind a "Show TLS" checkbox.
+- The frameless app window is **draggable via the top header**; the app now opens on the Pods view.
+
+### Fixed (this round)
+- Pod logs could show a previously viewed pod's logs: the logs tab was reused across pod switches with no stale-response guard. Each pod now gets its own tab instance (`key` per pod), which also resets container/tail selections.
+
+### Added (earlier)
 - **Two-part sidebar**: a compact cluster selector on top and a Compute/Workloads navigation tree below, replacing the in-content tab bar. Collapses to an icon rail.
 - **Scoped loading** for Pods, Secrets, and Helm: these are never fetched cluster-wide. Pods require a namespace or node scope; Secrets and Helm require a namespace. Filtering moved server-side (`getPods` takes a namespace/node/node-group scope; a new `namespaces` endpoint feeds the pickers). Node/node-group click-through pre-scopes the Pods view.
 - **One-click reconnect**: expired-credential requests return `401 auth_expired` and surface a Reconnect banner (plus a header button) instead of a generic error — no app restart needed after refreshing your AWS session.
