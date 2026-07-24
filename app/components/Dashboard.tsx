@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, Paper, Alert, Typography } from '@mui/material';
+import { HStack, StackItem } from '@astryxdesign/core/Stack';
+import { Card } from '@astryxdesign/core/Card';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Center } from '@astryxdesign/core/Center';
+import { Text } from '@astryxdesign/core/Text';
 import Sidebar from './Sidebar';
 import ClusterDetails from './ClusterDetails';
 import { Cluster, ActiveView } from '../types/kubernetes';
@@ -10,7 +14,6 @@ import {
   getSidebarCollapsed,
   saveSidebarCollapsed,
 } from '../lib/kubernetes-client';
-import { useTheme } from '../lib/ThemeProvider';
 import { DEFAULT_CONTEXT_NAME } from '../lib/constants';
 
 export default function Dashboard() {
@@ -21,7 +24,6 @@ export default function Dashboard() {
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [openTabs, setOpenTabs] = useState<ActiveView[]>(['pods']);
   const [activeTab, setActiveTab] = useState<ActiveView | null>('pods');
-  const { mode } = useTheme();
 
   // Open-if-absent + focus; max one tab per view.
   const handleNavigate = (view: ActiveView) => {
@@ -59,44 +61,19 @@ export default function Dashboard() {
 
         const res = await fetch('/api/clusters');
         if (!res.ok) {
-          let errorMessage = `Failed to fetch clusters (${res.status})`;
-          try {
-            const errorData = await res.json();
-            if (errorData.error) errorMessage = errorData.error;
-          } catch (e) { 
-            console.error('[Dashboard] Error parsing error response:', e);
-          }
-          throw new Error(errorMessage);
+          throw new Error(`Failed to fetch clusters: ${res.status}`);
         }
-        
         const data = await res.json();
 
         if (!Array.isArray(data)) {
           throw new Error(`Invalid response data format: expected array, got ${typeof data}`);
         }
 
-        if (data.length === 0) {
-          // Create a default placeholder cluster if none were found
-          const defaultCluster: Cluster = {
-            name: DEFAULT_CONTEXT_NAME,
-            context: DEFAULT_CONTEXT_NAME,
-            server: 'Current active context',
-            displayName: 'Current Cluster',
-            isActive: true
-          };
-
-          setClusters([defaultCluster]);
-          setSelectedCluster(defaultCluster);
-          setLoading(false);
-          return;
-        }
-
-        // Apply display names from localStorage
         const displayNames = getClusterDisplayNames();
-
-        const clustersWithDisplayNames = data.map((cluster: Cluster & { isActive?: boolean }) => ({
-          ...cluster,
-          displayName: displayNames[cluster.name] || ''
+        const clustersWithDisplayNames = data.map((c: Cluster) => ({
+          ...c,
+          displayName:
+            displayNames[c.name] || (c.name === DEFAULT_CONTEXT_NAME ? 'Default Cluster' : undefined),
         }));
 
         setClusters(clustersWithDisplayNames);
@@ -120,50 +97,24 @@ export default function Dashboard() {
   };
 
   return (
-    <Box sx={{ height: '100%' }}>
+    <div style={{ height: '100%' }}>
       {error && (
-        <Alert 
-          severity="error" 
-          sx={{ 
-            mb: 2, 
-            py: 0.5, 
-            fontSize: '0.8rem',
-            borderRadius: '8px',
-          }}
-        >
-          {error}
-        </Alert>
+        <div style={{ marginBottom: 'var(--spacing-4)' }}>
+          <Banner status="error" title={error} />
+        </div>
       )}
-      
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          gap: 2,
-          height: 'calc(100% - 4px)',
-        }}
-      >
-        <Box
-          sx={{
-            width: { xs: '100%', md: collapsed ? 64 : 240 },
+
+      <HStack gap={4} height="calc(100% - 4px)">
+        {/* Sidebar panel; width animates on collapse. */}
+        <div
+          style={{
+            width: collapsed ? 64 : 240,
             flexShrink: 0,
             height: '100%',
             transition: 'width 0.2s ease',
           }}
         >
-          <Paper
-            sx={{
-              height: '100%',
-              overflow: 'hidden',
-              p: collapsed ? 1 : 1.5,
-              display: 'flex',
-              flexDirection: 'column',
-              border: '1px solid',
-              borderColor: mode === 'light'
-                ? 'rgba(0, 0, 0, 0.06)'
-                : 'rgba(255, 255, 255, 0.06)',
-            }}
-          >
+          <Card height="100%" padding={collapsed ? 2 : 3}>
             <Sidebar
               clusters={clusters}
               selectedCluster={selectedCluster}
@@ -174,52 +125,37 @@ export default function Dashboard() {
               activeView={activeTab}
               onNavigate={handleNavigate}
             />
-          </Paper>
-        </Box>
+          </Card>
+        </div>
 
-        <Box sx={{ flex: 1, minWidth: 0, height: '100%' }}>
-          <Paper
-            sx={{
-              height: '100%',
-              overflow: 'auto',
-              p: 2,
-              border: '1px solid',
-              borderColor: mode === 'light'
-                ? 'rgba(0, 0, 0, 0.06)'
-                : 'rgba(255, 255, 255, 0.06)',
-            }}
-          >
-            {selectedCluster ? (
-              <ClusterDetails
-                cluster={selectedCluster}
-                openTabs={openTabs}
-                activeTab={activeTab}
-                onNavigate={handleNavigate}
-                onCloseTab={handleCloseTab}
-              />
-            ) : (
-              <Box
-                sx={{
-                  p: 3,
-                  textAlign: 'center',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Typography variant="body1" fontSize="0.9rem" color="text.secondary">
-                  {loading
-                    ? 'Loading clusters...'
-                    : clusters.length === 0
-                      ? 'No clusters found'
-                      : 'Select a cluster to view details'}
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-        </Box>
-      </Box>
-    </Box>
+        <StackItem size="fill">
+          <div style={{ minWidth: 0, height: '100%' }}>
+            <Card height="100%" padding={4}>
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {selectedCluster ? (
+                  <ClusterDetails
+                    cluster={selectedCluster}
+                    openTabs={openTabs}
+                    activeTab={activeTab}
+                    onNavigate={handleNavigate}
+                    onCloseTab={handleCloseTab}
+                  />
+                ) : (
+                  <Center>
+                    <Text type="body" color="secondary">
+                      {loading
+                        ? 'Loading clusters...'
+                        : clusters.length === 0
+                          ? 'No clusters found'
+                          : 'Select a cluster to view details'}
+                    </Text>
+                  </Center>
+                )}
+              </div>
+            </Card>
+          </div>
+        </StackItem>
+      </HStack>
+    </div>
   );
-} 
+}

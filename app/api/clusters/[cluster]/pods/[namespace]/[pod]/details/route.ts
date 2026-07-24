@@ -3,8 +3,9 @@ import { getPodDetail } from '../../../../../../../lib/kubernetes-server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { cluster: string; namespace: string; pod: string } }
+  props: { params: Promise<{ cluster: string; namespace: string; pod: string }> }
 ) {
+  const params = await props.params;
   try {
     const { cluster, namespace, pod } = params;
 

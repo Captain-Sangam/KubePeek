@@ -32,7 +32,7 @@ app/
     kubernetes-server.ts  All Kubernetes reads + client/kubeconfig handling (server-only)
     helm-server.ts        Helm release decoding, no helm binary (server-only)
     kubernetes-client.ts  Browser-side helpers (localStorage prefs, display names)
-    ThemeProvider.tsx     MUI theme + light/dark mode (client)
+    ThemeProvider.tsx     astryx Theme + light/dark mode (client)
     format.ts             Numeric parsing, usage colors, age formatting
     log-parsing.ts        Log line + JSON field parsing (logs fields filter)
   hooks/
@@ -40,7 +40,7 @@ app/
     useFindShortcut.ts    Cmd/Ctrl+F focuses a search input (visible-tab aware)
   components/
     shared/               UsageBar, TabPanel, StatusChip, CopyButton, PanelState,
-                          ScopePicker, ReconnectBanner
+                          ScopePicker, ReconnectBanner, tableRowClick (Table plugin)
     nodes/ pods/ logs/ secrets/ helm/ workloads/
   types/kubernetes.ts     Shared TypeScript interfaces (incl. ActiveView)
 electron/main.js          Electron main process (spawns the standalone server)

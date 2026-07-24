@@ -1,7 +1,12 @@
 'use client';
 
-import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material';
 import { ReactNode } from 'react';
+import { HStack, VStack } from '@astryxdesign/core/Stack';
+import { Spinner } from '@astryxdesign/core/Spinner';
+import { Text } from '@astryxdesign/core/Text';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Button } from '@astryxdesign/core/Button';
+import { EmptyState } from '@astryxdesign/core/EmptyState';
 
 interface PanelStateProps {
   loading?: boolean;
@@ -23,12 +28,10 @@ export default function PanelState({
 }: PanelStateProps) {
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6, gap: 1.5 }}>
-        <CircularProgress size={22} />
-        <Typography variant="body2" color="text.secondary">
-          Loading…
-        </Typography>
-      </Box>
+      <HStack gap={1.5} hAlign="center" vAlign="center" paddingBlock={10}>
+        <Spinner size="lg" />
+        <Text type="supporting">Loading…</Text>
+      </HStack>
     );
   }
 
@@ -39,30 +42,23 @@ export default function PanelState({
 
   if (error) {
     return (
-      <Box sx={{ py: 3, px: 2 }}>
-        <Alert
-          severity="error"
-          action={
-            onRetry ? (
-              <Button color="inherit" size="small" onClick={onRetry}>
-                Retry
-              </Button>
-            ) : undefined
+      <VStack paddingBlock={6} paddingInline={4}>
+        <Banner
+          status="error"
+          title={error}
+          endContent={
+            onRetry ? <Button label="Retry" size="sm" variant="ghost" onClick={onRetry} /> : undefined
           }
-        >
-          {error}
-        </Alert>
-      </Box>
+        />
+      </VStack>
     );
   }
 
   if (empty) {
     return (
-      <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography variant="body2" color="text.secondary">
-          {emptyMessage}
-        </Typography>
-      </Box>
+      <VStack paddingBlock={10}>
+        <EmptyState title={emptyMessage} isCompact />
+      </VStack>
     );
   }
 

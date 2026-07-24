@@ -3,8 +3,9 @@ import { getSecretDetail, deleteSecret } from '../../../../../../lib/kubernetes-
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { cluster: string; namespace: string; name: string } }
+  props: { params: Promise<{ cluster: string; namespace: string; name: string }> }
 ) {
+  const params = await props.params;
   try {
     const { cluster, namespace, name } = params;
 
@@ -32,8 +33,9 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { cluster: string; namespace: string; name: string } }
+  props: { params: Promise<{ cluster: string; namespace: string; name: string }> }
 ) {
+  const params = await props.params;
   try {
     const { cluster, namespace, name } = params;
     if (!cluster || !namespace || !name) {

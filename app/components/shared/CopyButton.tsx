@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { IconButton, Tooltip } from '@mui/material';
-import { ContentCopy as CopyIcon, Check as CheckIcon } from '@mui/icons-material';
+import { IconButton } from '@astryxdesign/core/IconButton';
+import { Icon } from '@astryxdesign/core/Icon';
 
 interface CopyButtonProps {
   value: string;
@@ -26,16 +26,14 @@ export default function CopyButton({ value, size = 'small', title = 'Copy', disa
   };
 
   return (
-    <Tooltip title={copied ? 'Copied!' : title} arrow>
-      <span>
-        <IconButton size={size} onClick={handleCopy} disabled={disabled}>
-          {copied ? (
-            <CheckIcon fontSize="inherit" color="success" />
-          ) : (
-            <CopyIcon fontSize="inherit" />
-          )}
-        </IconButton>
-      </span>
-    </Tooltip>
+    <IconButton
+      label={title}
+      tooltip={copied ? 'Copied!' : title}
+      variant="ghost"
+      size={size === 'small' ? 'sm' : 'md'}
+      onClick={handleCopy}
+      isDisabled={disabled}
+      icon={<Icon icon={copied ? 'checkDouble' : 'copy'} color={copied ? 'success' : 'inherit'} />}
+    />
   );
 }

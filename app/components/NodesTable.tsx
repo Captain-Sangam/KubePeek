@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Box, TableSortLabel,
-} from '@mui/material';
+import { Table, TableHeader, TableBody, TableRow, TableHeaderCell } from '@astryxdesign/core/Table';
+import { HStack } from '@astryxdesign/core/Stack';
+import { Icon } from '@astryxdesign/core/Icon';
 import { Node, NodeGroupInfo } from '../types/kubernetes';
 import { parseNumericValue } from '../lib/format';
 import NodeRow, { nodeColumnWidths } from './nodes/NodeRow';
@@ -16,7 +15,7 @@ interface HeadCell {
   id: keyof Node | 'utilization' | 'started';
   label: string;
   sortable: boolean;
-  align?: 'left' | 'right' | 'center';
+  align?: 'left' | 'right';
   width: string;
 }
 
@@ -83,57 +82,53 @@ export default function NodesTable({ nodes, nodeGroups, viewMode, onNodeSelect, 
   });
 
   return (
-    <Box>
-      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 200px)' }}>
-        <Table stickyHeader size="small" sx={{ minWidth: 650, tableLayout: 'fixed' }}>
-          <TableHead>
-            <TableRow>
-              {headCells.map((headCell, index) => {
-                const label =
-                  headCell.id === 'instanceType' && viewMode === 'nodeGroups' ? 'Nodes' : headCell.label;
-                return (
-                  <TableCell
-                    align={headCell.align || 'left'}
-                    key={`${headCell.id}-${index}`}
-                    sortDirection={orderBy === headCell.id ? order : false}
-                    sx={{
-                      fontWeight: 600, py: 1.5, fontSize: '0.75rem',
-                      backgroundColor: 'action.hover',
-                      width: headCell.width, maxWidth: headCell.width,
-                    }}
-                  >
-                    {headCell.sortable ? (
-                      <TableSortLabel
-                        active={orderBy === headCell.id}
-                        direction={orderBy === headCell.id ? order : 'asc'}
-                        onClick={() => handleRequestSort(headCell.id)}
-                      >
-                        {label}
-                      </TableSortLabel>
-                    ) : (
-                      label
-                    )}
-                  </TableCell>
-                );
-              })}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {viewMode === 'nodeGroups'
-              ? sortedNodeGroups.map((nodeGroup) => (
-                  <NodeGroupRow
-                    key={nodeGroup.name}
-                    nodeGroup={nodeGroup}
-                    onNodeSelect={onNodeSelect}
-                    onNodeGroupSelect={onNodeGroupSelect}
-                  />
-                ))
-              : sortedNodes.map((node) => (
-                  <NodeRow key={node.name} node={node} onNodeSelect={onNodeSelect} />
-                ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Box>
+    <div className="kp-table-scroll">
+      <Table density="compact" hasHover style={{ tableLayout: 'fixed', width: '100%' }}>
+        <TableHeader>
+          <TableRow isHeaderRow>
+            {headCells.map((headCell, index) => {
+              const label =
+                headCell.id === 'instanceType' && viewMode === 'nodeGroups' ? 'Nodes' : headCell.label;
+              return (
+                <TableHeaderCell
+                  key={`${headCell.id}-${index}`}
+                  style={{
+                    width: headCell.width,
+                    textAlign: headCell.align || 'left',
+                    cursor: headCell.sortable ? 'pointer' : undefined,
+                  }}
+                  onClick={headCell.sortable ? () => handleRequestSort(headCell.id) : undefined}
+                >
+                  {headCell.sortable ? (
+                    <HStack gap={0.5} vAlign="center" hAlign={headCell.align === 'right' ? 'end' : 'start'}>
+                      <span>{label}</span>
+                      {orderBy === headCell.id && (
+                        <Icon icon={order === 'asc' ? 'arrowUp' : 'arrowDown'} size="xsm" />
+                      )}
+                    </HStack>
+                  ) : (
+                    label
+                  )}
+                </TableHeaderCell>
+              );
+            })}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {viewMode === 'nodeGroups'
+            ? sortedNodeGroups.map((nodeGroup) => (
+                <NodeGroupRow
+                  key={nodeGroup.name}
+                  nodeGroup={nodeGroup}
+                  onNodeSelect={onNodeSelect}
+                  onNodeGroupSelect={onNodeGroupSelect}
+                />
+              ))
+            : sortedNodes.map((node) => (
+                <NodeRow key={node.name} node={node} onNodeSelect={onNodeSelect} />
+              ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

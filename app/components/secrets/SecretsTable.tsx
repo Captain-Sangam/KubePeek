@@ -1,22 +1,23 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import {
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Chip, TextField, InputAdornment, TableSortLabel, Box,
-  FormControl, Select, MenuItem, InputLabel, FormControlLabel, Checkbox, Typography,
-} from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { Table, proportional, pixel, useTableSortable, useTableSortableState } from '@astryxdesign/core/Table';
+import { HStack, StackItem } from '@astryxdesign/core/Stack';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { Selector } from '@astryxdesign/core/Selector';
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
+import { Token } from '@astryxdesign/core/Token';
+import { Text } from '@astryxdesign/core/Text';
 import { SecretSummary, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
 import { useFindShortcut } from '../../hooks/useFindShortcut';
 import { formatAge, formatFullTimestamp } from '../../lib/format';
 import PanelState from '../shared/PanelState';
 import ScopePicker from '../shared/ScopePicker';
+import { tableRowClick } from '../shared/tableRowClick';
 import SecretDetailDialog from './SecretDetailDialog';
 
-type Order = 'asc' | 'desc';
-type SortKey = 'name' | 'namespace' | 'type' | 'keyCount' | 'createdAt';
+type SecretRow = SecretSummary & Record<string, unknown>;
 
 interface SecretsTableProps {
   cluster: Cluster;
@@ -33,8 +34,6 @@ export default function SecretsTable({
   cluster, namespace, namespaces, namespacesLoading, namespacesError,
   onNamespaceChange, onRetryNamespaces, onAuthError,
 }: SecretsTableProps) {
-  const [order, setOrder] = useState<Order>('asc');
-  const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTls, setShowTls] = useState(false);
   const [selected, setSelected] = useState<SecretSummary | null>(null);
@@ -52,11 +51,19 @@ export default function SecretsTable({
     if (authError) onAuthError();
   }, [authError, onAuthError]);
 
-  const handleSort = (property: SortKey) => {
-    const isAsc = orderBy === property && order === 'asc';
-    setOrder(isAsc ? 'desc' : 'asc');
-    setOrderBy(property);
-  };
+  const filtered = secrets.filter((s) => {
+    if (!showTls && s.type === 'kubernetes.io/tls') return false;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return s.name.toLowerCase().includes(q) || s.namespace.toLowerCase().includes(q) || s.type.toLowerCase().includes(q);
+  }) as SecretRow[];
+
+  const { sortedData, sortConfig } = useTableSortableState<SecretRow>({
+    data: filtered,
+    defaultSort: [{ sortKey: 'name', direction: 'ascending' }],
+    comparators: { keyCount: (a, b) => a.keyCount - b.keyCount },
+  });
+  const sortable = useTableSortable<SecretRow>(sortConfig);
 
   // Gate on namespace: nothing loads until one is picked.
   if (!namespace) {
@@ -72,88 +79,60 @@ export default function SecretsTable({
     );
   }
 
-  const filtered = secrets.filter((s) => {
-    if (!showTls && s.type === 'kubernetes.io/tls') return false;
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return s.name.toLowerCase().includes(q) || s.namespace.toLowerCase().includes(q) || s.type.toLowerCase().includes(q);
-  });
-
-  const cmp = (a: number | string, b: number | string) =>
-    order === 'desc' ? (b < a ? -1 : b > a ? 1 : 0) : a < b ? -1 : a > b ? 1 : 0;
-
-  const sorted = [...filtered].sort((a, b) => {
-    switch (orderBy) {
-      case 'keyCount':
-        return cmp(a.keyCount, b.keyCount);
-      case 'createdAt':
-        return cmp(a.createdAt || '', b.createdAt || '');
-      default:
-        return cmp(String(a[orderBy]).toLowerCase(), String(b[orderBy]).toLowerCase());
-    }
-  });
-
-  const cellSx = { py: 0.5, px: 1, fontSize: '0.75rem' };
-  const headSx = { backgroundColor: 'action.hover', py: 0.75, px: 1, fontSize: '0.75rem', fontWeight: 600 };
-
   return (
     <>
-      <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-        <TextField
-          variant="outlined"
-          size="small"
-          placeholder="Search secrets..."
-          inputRef={searchRef}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          sx={{ flex: 1, minWidth: 180, '& .MuiInputBase-root': { height: 32 } }}
-          InputProps={{
-            startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>),
-            style: { fontSize: '0.8rem' },
-          }}
+      <HStack gap={2} wrap="wrap" paddingBlock={2}>
+        <StackItem size="fill">
+          <TextInput
+            label="Search secrets"
+            isLabelHidden
+            size="sm"
+            placeholder="Search secrets..."
+            startIcon="search"
+            ref={searchRef}
+            value={searchQuery}
+            onChange={(value) => setSearchQuery(value)}
+          />
+        </StackItem>
+        <Selector
+          label="Namespace"
+          isLabelHidden
+          size="sm"
+          hasSearch
+          options={namespaces}
+          value={namespace}
+          onChange={(value) => value && onNamespaceChange(value)}
         />
-        <FormControl size="small" sx={{ minWidth: 150, '& .MuiInputBase-root': { height: 32, fontSize: '0.8rem' } }}>
-          <InputLabel sx={{ fontSize: '0.8rem' }}>Namespace</InputLabel>
-          <Select value={namespace} label="Namespace" onChange={(e) => onNamespaceChange(e.target.value)}>
-            {namespaces.map((ns) => (
-              <MenuItem key={ns} value={ns} sx={{ fontSize: '0.8rem' }}>{ns}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControlLabel
-          control={<Checkbox size="small" checked={showTls} onChange={(e) => setShowTls(e.target.checked)} />}
-          label={<Typography variant="caption">Show TLS</Typography>}
-          sx={{ ml: 0, mr: 0 }}
-        />
-      </Box>
+        <CheckboxInput label="Show TLS" value={showTls} onChange={(checked) => setShowTls(checked)} />
+      </HStack>
 
       <PanelState loading={loading} error={error} empty={!loading && !error && secrets.length === 0} emptyMessage={`No secrets in namespace "${namespace}"`} onRetry={refetch}>
-        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 250px)' }}>
-          <Table stickyHeader size="small">
-            <TableHead>
-              <TableRow>
-                {([['name', 'Name'], ['namespace', 'Namespace'], ['type', 'Type'], ['keyCount', 'Keys'], ['createdAt', 'Age']] as [SortKey, string][]).map(([id, label]) => (
-                  <TableCell key={id} sx={headSx} sortDirection={orderBy === id ? order : false}>
-                    <TableSortLabel active={orderBy === id} direction={orderBy === id ? order : 'asc'} onClick={() => handleSort(id)}>
-                      {label}
-                    </TableSortLabel>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sorted.map((s) => (
-                <TableRow key={`${s.namespace}-${s.name}`} hover onClick={() => setSelected(s)} sx={{ cursor: 'pointer' }}>
-                  <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</TableCell>
-                  <TableCell sx={cellSx}><Chip label={s.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} /></TableCell>
-                  <TableCell sx={{ ...cellSx, fontFamily: 'monospace', fontSize: '0.7rem' }}>{s.type}</TableCell>
-                  <TableCell sx={cellSx}>{s.keyCount}</TableCell>
-                  <TableCell sx={cellSx} title={formatFullTimestamp(s.createdAt)}>{formatAge(s.createdAt)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <div className="kp-table-scroll">
+          <Table<SecretRow>
+            data={sortedData}
+            idKey={(s) => `${s.namespace}-${s.name}`}
+            density="compact"
+            hasHover
+            textOverflow="truncate"
+            plugins={{ sortable, rowClick: tableRowClick<SecretRow>((s) => setSelected(s)) }}
+            columns={[
+              { key: 'name', header: 'Name', width: proportional(2), sortable: true },
+              {
+                key: 'namespace', header: 'Namespace', width: proportional(1), sortable: true,
+                renderCell: (s) => <Token label={s.namespace} size="sm" />,
+              },
+              {
+                key: 'type', header: 'Type', width: proportional(1), sortable: true,
+                renderCell: (s) => <Text type="code" size="2xs">{s.type}</Text>,
+              },
+              { key: 'keyCount', header: 'Keys', width: pixel(70), sortable: true },
+              {
+                key: 'createdAt', header: 'Age', width: pixel(90), sortable: true,
+                renderCell: (s) => <span title={formatFullTimestamp(s.createdAt)}>{formatAge(s.createdAt)}</span>,
+              },
+            ]}
+          />
+        </div>
       </PanelState>
 
       <SecretDetailDialog

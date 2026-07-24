@@ -1,7 +1,9 @@
 'use client';
 
-import { Box, Divider, IconButton, Tooltip } from '@mui/material';
-import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon } from '@mui/icons-material';
+import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
+import { Divider } from '@astryxdesign/core/Divider';
+import { IconButton } from '@astryxdesign/core/IconButton';
+import { Icon } from '@astryxdesign/core/Icon';
 import { Cluster, ActiveView } from '../types/kubernetes';
 import ClusterSelector from './ClusterSelector';
 import NavTree from './NavTree';
@@ -28,21 +30,17 @@ export default function Sidebar({
   onNavigate,
 }: SidebarProps) {
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: collapsed ? 'center' : 'flex-end',
-          mb: 1,
-        }}
-      >
-        <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} placement="right" arrow>
-          <IconButton size="small" onClick={onToggleCollapse} sx={{ p: 0.5 }}>
-            {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-      </Box>
+    <VStack gap={1.5} height="100%">
+      <HStack hAlign={collapsed ? 'center' : 'end'}>
+        <IconButton
+          label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          variant="ghost"
+          size="sm"
+          onClick={onToggleCollapse}
+          icon={<Icon icon={collapsed ? 'chevronRight' : 'chevronLeft'} size="sm" />}
+        />
+      </HStack>
 
       <ClusterSelector
         clusters={clusters}
@@ -52,11 +50,13 @@ export default function Sidebar({
         collapsed={collapsed}
       />
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider />
 
-      <Box sx={{ flex: 1, overflowY: 'auto' }}>
-        <NavTree activeView={activeView} onNavigate={onNavigate} collapsed={collapsed} />
-      </Box>
-    </Box>
+      <StackItem size="fill">
+        <VStack height="100%" isScrollable>
+          <NavTree activeView={activeView} onNavigate={onNavigate} collapsed={collapsed} />
+        </VStack>
+      </StackItem>
+    </VStack>
   );
 }

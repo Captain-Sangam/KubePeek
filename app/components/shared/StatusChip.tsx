@@ -1,41 +1,30 @@
 'use client';
 
-import { Chip, ChipProps } from '@mui/material';
+import { Token } from '@astryxdesign/core/Token';
 
-type MuiColor = 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info';
+type TokenColor = 'green' | 'yellow' | 'red' | 'gray';
 
-// Map a status/phase/type string to a chip color. Covers pod phases,
+// Map a status/phase/type string to a token color. Covers pod phases,
 // container states, event types, and helm release statuses.
-const colorFor = (value: string): MuiColor => {
+const colorFor = (value: string): TokenColor => {
   const v = value.toLowerCase();
   if (['running', 'ready', 'deployed', 'active', 'succeeded', 'normal', 'true'].includes(v)) {
-    return 'success';
+    return 'green';
   }
   if (['pending', 'containercreating', 'waiting', 'pending-install', 'pending-upgrade', 'pending-rollback', 'uninstalling', 'terminating', 'warning'].includes(v)) {
-    return 'warning';
+    return 'yellow';
   }
   if (['failed', 'error', 'crashloopbackoff', 'imagepullbackoff', 'errimagepull', 'evicted', 'oomkilled'].includes(v)) {
-    return 'error';
+    return 'red';
   }
-  if (['completed', 'terminated', 'superseded', 'uninstalled'].includes(v)) {
-    return 'default';
-  }
-  return 'default';
+  return 'gray';
 };
 
-interface StatusChipProps extends Omit<ChipProps, 'color' | 'label'> {
+interface StatusChipProps {
   status: string;
+  size?: 'sm' | 'md' | 'lg';
 }
 
-export default function StatusChip({ status, size = 'small', ...rest }: StatusChipProps) {
-  return (
-    <Chip
-      label={status}
-      size={size}
-      color={colorFor(status)}
-      variant="outlined"
-      sx={{ fontWeight: 500, fontSize: '0.7rem', height: 20, ...(rest.sx || {}) }}
-      {...rest}
-    />
-  );
+export default function StatusChip({ status, size = 'sm' }: StatusChipProps) {
+  return <Token label={status} size={size} color={colorFor(status)} />;
 }

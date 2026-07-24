@@ -1,16 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Box, Button, IconButton, Select, MenuItem, FormControl, CircularProgress,
-  Typography, Tooltip, Fab, FormControlLabel, Switch, TextField, InputAdornment,
-} from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  ViewSidebar as ViewSidebarIcon,
-  KeyboardArrowDown as ArrowDownIcon,
-  Search as SearchIcon,
-} from '@mui/icons-material';
+import { HStack, StackItem } from '@astryxdesign/core/Stack';
+import { Text } from '@astryxdesign/core/Text';
+import { Selector } from '@astryxdesign/core/Selector';
+import { Switch } from '@astryxdesign/core/Switch';
+import { ToggleButton } from '@astryxdesign/core/ToggleButton';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { IconButton } from '@astryxdesign/core/IconButton';
+import { Icon } from '@astryxdesign/core/Icon';
+import { Spinner } from '@astryxdesign/core/Spinner';
+import { RefreshCw, PanelRight } from 'lucide-react';
 import {
   type ParsedLine, parseLine, formatTimestamp, levelColor,
   discoverKeys, renderLineContent, computeDefaultKeys,
@@ -20,6 +20,14 @@ import { useFindShortcut } from '../../hooks/useFindShortcut';
 import LogFieldsSidebar from '../logs/LogFieldsSidebar';
 
 const TAIL_OPTIONS = ['100', '500', '1000', '2000'] as const;
+
+// levelColor() returns MUI palette names (shared lib); map them to astryx tokens.
+const LEVEL_COLORS: Record<string, string> = {
+  'error.main': 'var(--color-error)',
+  'warning.main': 'var(--color-warning)',
+  'success.main': 'var(--color-success)',
+  'grey.500': 'var(--color-track)',
+};
 
 interface PodLogsTabProps {
   cluster: Cluster;
@@ -133,61 +141,68 @@ export default function PodLogsTab({ cluster, pod, containers }: PodLogsTabProps
       return next;
     });
 
+  const centered = (content: React.ReactNode) => (
+    <HStack gap={1} hAlign="center" vAlign="center" paddingInline={4} style={{ height: '100%' }}>
+      {content}
+    </HStack>
+  );
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* Toolbar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
+      <HStack gap={1} vAlign="center" wrap="wrap" padding={2} style={{ borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
         {containers && containers.length > 1 && (
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <Select value={container} onChange={(e) => setContainer(e.target.value)} sx={{ height: 30, fontSize: '0.75rem' }}>
-              {containers.map((c) => (
-                <MenuItem key={c} value={c} sx={{ fontSize: '0.75rem' }}>{c}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Selector
+            label="Container"
+            isLabelHidden
+            size="sm"
+            options={containers}
+            value={container}
+            onChange={(value) => value && setContainer(value)}
+          />
         )}
-        <FormControl size="small" sx={{ minWidth: 100 }}>
-          <Select value={tailLines} onChange={(e) => setTailLines(e.target.value)} sx={{ height: 30, fontSize: '0.75rem' }}>
-            {TAIL_OPTIONS.map((n) => (
-              <MenuItem key={n} value={n} sx={{ fontSize: '0.75rem' }}>{n} lines</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <Button
-          variant={smartMode ? 'contained' : 'outlined'}
-          size="small"
-          startIcon={<ViewSidebarIcon sx={{ fontSize: '1rem' }} />}
-          onClick={() => setSmartMode(!smartMode)}
-          sx={{ height: 30, fontSize: '0.72rem', textTransform: 'none' }}
+        <Selector
+          label="Tail lines"
+          isLabelHidden
+          size="sm"
+          options={TAIL_OPTIONS.map((n) => ({ value: n, label: `${n} lines` }))}
+          value={tailLines}
+          onChange={(value) => value && setTailLines(value)}
+        />
+        <ToggleButton
+          label="Fields"
+          size="sm"
+          icon={<Icon icon={PanelRight} size="sm" />}
+          isPressed={smartMode}
+          onPressedChange={(pressed) => setSmartMode(pressed)}
         >
           Fields
-        </Button>
-        <FormControlLabel
-          control={<Switch size="small" checked={previous} onChange={(e) => setPrevious(e.target.checked)} />}
-          label={<Typography variant="caption">Previous</Typography>}
-          sx={{ ml: 0 }}
+        </ToggleButton>
+        <Switch label="Previous" value={previous} onChange={(checked) => setPrevious(checked)} />
+        <StackItem size="fill" style={{ minWidth: 160 }}>
+          <TextInput
+            label="Search logs"
+            isLabelHidden
+            size="sm"
+            placeholder="Search logs..."
+            startIcon="search"
+            ref={searchRef}
+            value={logSearch}
+            onChange={(value) => setLogSearch(value)}
+          />
+        </StackItem>
+        <IconButton
+          label="Refresh"
+          tooltip="Refresh"
+          variant="ghost"
+          size="sm"
+          onClick={fetchLogs}
+          isDisabled={loading}
+          icon={loading ? <Spinner size="sm" /> : <Icon icon={RefreshCw} size="sm" />}
         />
-        <TextField
-          variant="outlined"
-          size="small"
-          placeholder="Search logs..."
-          inputRef={searchRef}
-          value={logSearch}
-          onChange={(e) => setLogSearch(e.target.value)}
-          sx={{ flex: 1, minWidth: 160, '& .MuiInputBase-root': { height: 30 } }}
-          InputProps={{
-            startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>),
-            style: { fontSize: '0.75rem' },
-          }}
-        />
-        <Tooltip title="Refresh" arrow>
-          <IconButton size="small" onClick={fetchLogs} disabled={loading}>
-            {loading ? <CircularProgress size={14} /> : <RefreshIcon fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-      </Box>
+      </HStack>
 
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {smartMode && discoveredKeys.length > 0 && (
           <LogFieldsSidebar
             discoveredKeys={discoveredKeys}
@@ -201,76 +216,77 @@ export default function PodLogsTab({ cluster, pod, containers }: PodLogsTabProps
           />
         )}
 
-        <Box sx={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0 }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0 }}>
           {loading ? (
-            <Box sx={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 1, color: 'text.secondary' }}>
-              <CircularProgress size={16} />
-              <Typography variant="body2">Loading logs…</Typography>
-            </Box>
+            centered(
+              <>
+                <Spinner size="md" />
+                <Text type="supporting">Loading logs…</Text>
+              </>
+            )
           ) : error ? (
-            <Box sx={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'error.main', px: 2, textAlign: 'center' }}>
-              <Typography variant="body2">{error}</Typography>
-            </Box>
+            centered(
+              <Text type="body" size="sm" justify="center" style={{ color: 'var(--color-error)' }}>
+                {error}
+              </Text>
+            )
           ) : visibleLines.length === 0 ? (
-            <Box sx={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
-              <Typography variant="body2">
+            centered(
+              <Text type="supporting">
                 {lines.length === 0 ? 'No logs available' : 'No lines match your search'}
-              </Typography>
-            </Box>
+              </Text>
+            )
           ) : (
             <>
-              <Box
+              <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                sx={{
+                style={{
                   height: '100%',
                   overflow: 'auto',
                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
                   fontSize: '0.7rem',
-                  bgcolor: (theme) => (theme.palette.mode === 'light' ? 'grey.50' : '#161616'),
+                  background: 'var(--color-background-muted)',
                 }}
               >
                 {visibleLines.map((line, i) => {
                   const color = levelColor(line.level);
                   return (
-                    <Box
+                    <div
                       key={i}
-                      sx={{
+                      style={{
                         display: 'flex',
-                        gap: 1.5,
-                        px: 1,
-                        py: '1px',
-                        borderLeft: '3px solid',
-                        borderLeftColor: color ?? 'transparent',
-                        '&:hover': { bgcolor: 'action.hover' },
+                        gap: 'var(--spacing-3)',
+                        padding: '1px var(--spacing-2)',
+                        borderLeft: `3px solid ${(color && LEVEL_COLORS[color]) || 'transparent'}`,
                       }}
                     >
                       {line.timestamp && (
-                        <Box component="span" sx={{ flexShrink: 0, color: 'text.secondary', userSelect: 'all' }}>
+                        <span style={{ flexShrink: 0, color: 'var(--color-text-secondary)', userSelect: 'all' }}>
                           {formatTimestamp(line.timestamp)}
-                        </Box>
+                        </span>
                       )}
-                      <Box component="span" sx={{ minWidth: 0, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
+                      <span style={{ minWidth: 0, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
                         {renderLineContent(line, smartMode, selectedKeys)}
-                      </Box>
-                    </Box>
+                      </span>
+                    </div>
                   );
                 })}
-              </Box>
+              </div>
               {showScrollBtn && (
-                <Fab
-                  size="small"
-                  color="default"
-                  onClick={scrollToBottom}
-                  sx={{ position: 'absolute', bottom: 12, right: 16, boxShadow: 3 }}
-                >
-                  <ArrowDownIcon />
-                </Fab>
+                <div style={{ position: 'absolute', bottom: 12, right: 16 }}>
+                  <IconButton
+                    label="Scroll to bottom"
+                    tooltip="Scroll to bottom"
+                    onClick={scrollToBottom}
+                    icon={<Icon icon="arrowDown" />}
+                  />
+                </div>
               )}
             </>
           )}
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }

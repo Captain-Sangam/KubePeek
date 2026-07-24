@@ -1,6 +1,9 @@
 'use client';
 
-import { Box, LinearProgress, Tooltip, Typography } from '@mui/material';
+import { VStack } from '@astryxdesign/core/Stack';
+import { ProgressBar } from '@astryxdesign/core/ProgressBar';
+import { Tooltip } from '@astryxdesign/core/Tooltip';
+import { Text } from '@astryxdesign/core/Text';
 import { getUsageColor } from '../../lib/format';
 
 interface UsageBarProps {
@@ -10,12 +13,14 @@ interface UsageBarProps {
   caption?: string;
   // Tooltip text, e.g. "45m of 100m limit (45%)".
   tooltip?: string;
-  // Bar width; height controls thickness.
+  // Bar width; bar thickness is themed (height kept for call-site compat, unused).
   width?: number | string;
   height?: number;
   // When there's no denominator, show this text instead of a bar.
   fallbackText?: string;
 }
+
+const VARIANT = { error: 'error', warning: 'warning', primary: 'accent' } as const;
 
 // Shared usage bar used by node groups, pods table, and the pod drawer.
 export default function UsageBar({
@@ -23,42 +28,31 @@ export default function UsageBar({
   caption,
   tooltip,
   width = '100%',
-  height = 5,
   fallbackText,
 }: UsageBarProps) {
   if (percent === null || percent === undefined) {
     return (
-      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+      <Text type="supporting" size="2xs">
         {fallbackText ?? caption ?? '—'}
-      </Typography>
+      </Text>
     );
   }
 
   const bar = (
-    <Box sx={{ width, minWidth: 0 }}>
-      <LinearProgress
-        variant="determinate"
+    <VStack gap={0.5} width={width}>
+      <ProgressBar
+        label={tooltip ?? caption ?? 'Usage'}
+        isLabelHidden
         value={Math.min(percent, 100)}
-        color={getUsageColor(percent)}
-        sx={{ height, borderRadius: height / 2 }}
+        variant={VARIANT[getUsageColor(percent)]}
       />
       {caption && (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ fontSize: '0.65rem', display: 'block', mt: 0.25, whiteSpace: 'nowrap' }}
-        >
+        <Text type="supporting" size="2xs" textWrap="nowrap">
           {caption}
-        </Typography>
+        </Text>
       )}
-    </Box>
+    </VStack>
   );
 
-  return tooltip ? (
-    <Tooltip title={tooltip} arrow>
-      {bar}
-    </Tooltip>
-  ) : (
-    bar
-  );
+  return tooltip ? <Tooltip content={tooltip}>{bar}</Tooltip> : bar;
 }

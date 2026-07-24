@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Box, Tabs, Tab, Typography } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Tab, TabList } from '@astryxdesign/core/TabList';
+import { Icon } from '@astryxdesign/core/Icon';
+import { Text } from '@astryxdesign/core/Text';
+import { VStack } from '@astryxdesign/core/Stack';
 import NodesTable from './NodesTable';
 import PodsTable from './PodsTable';
 import SecretsTable from './secrets/SecretsTable';
@@ -296,63 +298,56 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
   };
 
   return (
-    <Box sx={{ height: '100%' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {authExpired && <ReconnectBanner cluster={cluster} onReconnect={handleReconnect} />}
 
       {openTabs.length > 0 && (
-        <Tabs
-          value={activeTab ?? false}
-          onChange={(_, v) => onNavigate(v)}
-          sx={{
-            minHeight: 36,
-            borderBottom: 1,
-            borderColor: 'divider',
-            '& .MuiTab-root': { minHeight: 36, fontSize: '0.8rem', textTransform: 'none', py: 0.5 },
-          }}
-        >
+        <TabList value={activeTab ?? ''} onChange={(v) => onNavigate(v as ActiveView)} size="sm" hasDivider>
           {openTabs.map((view) => (
             <Tab
               key={view}
               value={view}
-              disableRipple
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  {TAB_LABELS[view]}
-                  {/* Plain SVG, not IconButton — a button can't nest inside Tab's button. */}
-                  <CloseIcon
-                    aria-label={`Close ${TAB_LABELS[view]}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCloseTab(view);
-                    }}
-                    sx={{
-                      fontSize: 14,
-                      borderRadius: '50%',
-                      color: 'text.disabled',
-                      '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
-                    }}
-                  />
-                </Box>
+              label={TAB_LABELS[view]}
+              endContent={
+                // Plain clickable span, not IconButton — a button can't nest inside Tab's button.
+                <span
+                  role="button"
+                  aria-label={`Close ${TAB_LABELS[view]}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseTab(view);
+                  }}
+                  style={{ display: 'inline-flex', cursor: 'pointer' }}
+                >
+                  <Icon icon="close" size="xsm" color="secondary" />
+                </span>
               }
             />
           ))}
-        </Tabs>
+        </TabList>
       )}
 
-      <Box sx={{ pt: 1 }}>
+      <div style={{ paddingTop: 'var(--spacing-2)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {openTabs.map((view) => (
-          <Box key={view} sx={{ display: view === activeTab ? 'block' : 'none' }}>
+          <div
+            key={view}
+            style={
+              view === activeTab
+                ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }
+                : { display: 'none' }
+            }
+          >
             {renderView(view)}
-          </Box>
+          </div>
         ))}
         {openTabs.length === 0 && (
-          <Box sx={{ py: 8, textAlign: 'center' }}>
-            <Typography variant="body1" fontSize="0.9rem" color="text.secondary">
+          <VStack align="center" paddingBlock={10}>
+            <Text type="body" color="secondary">
               Pick a view from the sidebar
-            </Typography>
-          </Box>
+            </Text>
+          </VStack>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

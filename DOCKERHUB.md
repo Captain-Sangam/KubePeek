@@ -58,7 +58,7 @@ docker run -d -p 8080:3000 --network="host" -v $HOME/.kube:/home/node/.kube ajsa
 ## Technical Details
 
 - Built with Next.js and TypeScript
-- Uses Material-UI (MUI) for UI components
+- Uses the astryx design system (@astryxdesign/core) for UI components
 - Leverages the official Kubernetes JavaScript client (@kubernetes/client-node)
 - Real-time metrics using Kubernetes Metrics API
 

@@ -25,7 +25,7 @@ Deployments, Ingresses, and HPA were added this way; use one of them (e.g. `git 
 1. **Summary type** — add `FooSummary` to `app/types/kubernetes.ts` (flat, display-ready fields; include `createdAt` + `age`), and add the view key to the `ActiveView` union.
 2. **Server function** — `listFoos(clusterName, namespace?)` in `app/lib/kubernetes-server.ts`, using a client from `getClientForCluster` (add a `makeApiClient` line there if the API group isn't wired yet). Map to the summary type, sort by name, format age with `relativeAge`.
 3. **API route** — `app/api/clusters/[cluster]/foos/route.ts`, copied from the secrets route: validate `cluster`, read `namespace` from the query string, delegate, and keep the `isAuthError` → `401 auth_expired` branch.
-4. **Table component** — `app/components/<area>/FoosTable.tsx`, copied from `SecretsTable`: same props (`cluster`, `namespace`, `namespaces`, loading/error, `onNamespaceChange`, `onRetryNamespaces`, `onAuthError`), `ScopePicker` gate when `namespace` is null, `useFetch` on the route, search `TextField` with `useFindShortcut`, sortable headers, `PanelState` around the table.
+4. **Table component** — `app/components/<area>/FoosTable.tsx`, copied from `SecretsTable`: same props (`cluster`, `namespace`, `namespaces`, loading/error, `onNamespaceChange`, `onRetryNamespaces`, `onAuthError`), `ScopePicker` gate when `namespace` is null, `useFetch` on the route, search `TextInput` (ref + `useFindShortcut`), data-driven astryx `Table` with `useTableSortableState`/`useTableSortable` inside a `.kp-table-scroll` div (sticky header + fill-the-pane height), `tableRowClick` plugin if rows open a detail view, `PanelState` around the table.
 5. **Sidebar** — add the item (view key, label, icon) to `NAV_SECTIONS` in `app/components/NavTree.tsx`.
 6. **Tabs wiring** — in `app/components/ClusterDetails.tsx`: add the label to `TAB_LABELS`, a `fooNamespace` state, an entry in the `nsViews` list (drives last-namespace seeding and close-reset automatically), a line in the per-cluster reset effect, and a `case` in `renderView` (key it with `reloadNonce`, wrap `onNamespaceChange` to also `setLastNamespace`).
 
@@ -38,9 +38,10 @@ The project uses `@kubernetes/client-node` v0.20, whose list APIs take long **po
 ## Before opening a PR
 
 - `make typecheck` is clean
+- `npm run lint` is clean (next/core-web-vitals — this is the CI gate)
 - `make build` succeeds
 - If you touched cluster reads, verify against a real cluster (see the verification notes in the PR)
 
 ## Code style
 
-Match the surrounding code: MUI `sx` styling (no Tailwind), functional components, local state unless a hook already exists. Keep API routes thin and put logic in the lib layer.
+Match the surrounding code: astryx components with props first, then `style`/`className` with token vars (`var(--color-*|--spacing-*|--radius-*)`) — no Tailwind, no raw hex where a token exists. Run `npx astryx component <Name>` for any component's props (see the ASTRYX section in CLAUDE.md). Functional components, local state unless a hook already exists. Keep API routes thin and put logic in the lib layer.

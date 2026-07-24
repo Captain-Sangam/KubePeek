@@ -1,3 +1,7 @@
+@import '@astryxdesign/core/reset.css';
+@import '@astryxdesign/core/astryx.css';
+@import '@astryxdesign/theme-neutral/theme.css';
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -39,21 +43,40 @@ body {
 }
 
 /* Apply theme transitions to common elements */
-button, 
-a, 
-div, 
-span, 
-p, 
+button,
+a,
+div,
+span,
+p,
 h1, h2, h3, h4, h5, h6,
 th, td,
-svg,
-.MuiPaper-root,
-.MuiTypography-root,
-.MuiTableCell-root,
-.MuiIconButton-root,
-.MuiListItemText-root,
-.MuiTableSortLabel-root {
+svg {
   transition: var(--theme-transition);
+}
+
+/* Tables fill the remaining pane height (flex chain from Dashboard down).
+   astryx Table's own scroll wrapper becomes the single scroll container for
+   BOTH axes — sticky headers anchor to it, and scrollbars appear only on
+   real overflow. Its container-bleed margins are cancelled so the table
+   doesn't overflow the card by construction. */
+.kp-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.kp-table-scroll > [role='group'] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+}
+.kp-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-background-surface);
 }
 
 /* Custom scrollbar for webkit browsers */

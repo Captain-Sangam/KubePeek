@@ -1,7 +1,6 @@
 'use client';
 
-import { Box } from '@mui/material';
-import { ReactNode } from 'react';
+import { CSSProperties, ReactNode } from 'react';
 
 interface TabPanelProps {
   children: ReactNode;
@@ -9,20 +8,16 @@ interface TabPanelProps {
   index: number;
   // Keep the panel mounted (hidden) so it retains state across tab switches.
   keepMounted?: boolean;
-  sx?: object;
+  style?: CSSProperties;
 }
 
-export default function TabPanel({ children, value, index, keepMounted, sx }: TabPanelProps) {
+export default function TabPanel({ children, value, index, keepMounted, style }: TabPanelProps) {
   const active = value === index;
   if (!active && !keepMounted) return null;
 
   return (
-    <Box
-      role="tabpanel"
-      hidden={!active}
-      sx={{ display: active ? 'block' : 'none', ...sx }}
-    >
+    <div role="tabpanel" hidden={!active} style={{ display: active ? 'block' : 'none', ...style }}>
       {children}
-    </Box>
+    </div>
   );
 }

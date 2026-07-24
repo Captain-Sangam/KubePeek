@@ -1,7 +1,12 @@
 'use client';
 
-import { Box, Typography, Autocomplete, TextField, Divider } from '@mui/material';
-import { FilterAltOutlined } from '@mui/icons-material';
+import { useMemo } from 'react';
+import { VStack } from '@astryxdesign/core/Stack';
+import { Center } from '@astryxdesign/core/Center';
+import { Icon } from '@astryxdesign/core/Icon';
+import { Text } from '@astryxdesign/core/Text';
+import { Divider } from '@astryxdesign/core/Divider';
+import { Typeahead, createStaticSource } from '@astryxdesign/core/Typeahead';
 import PanelState from './PanelState';
 
 interface ScopePickerProps {
@@ -16,6 +21,8 @@ interface ScopePickerProps {
   onSelectNode?: (node: string) => void;
 }
 
+const toItems = (names: string[]) => names.map((name) => ({ id: name, label: name }));
+
 // The empty-state gate shown before a namespace/node scope is chosen. Nothing
 // is fetched until the user picks a scope here.
 export default function ScopePicker({
@@ -28,37 +35,48 @@ export default function ScopePicker({
   nodes,
   onSelectNode,
 }: ScopePickerProps) {
+  const namespaceSource = useMemo(() => createStaticSource(toItems(namespaces)), [namespaces]);
+  const nodeSource = useMemo(() => createStaticSource(toItems(nodes ?? [])), [nodes]);
+
   return (
     <PanelState loading={loading} error={error} onRetry={onRetry}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, px: 2, gap: 2, maxWidth: 420, mx: 'auto' }}>
-        <FilterAltOutlined sx={{ fontSize: 40, color: 'text.disabled' }} />
-        <Typography variant="body1" color="text.secondary" textAlign="center">
-          Select a namespace to view {resourceLabel}
-        </Typography>
+      <Center axis="horizontal">
+        <VStack gap={2} align="stretch" maxWidth={420} width="100%" paddingBlock={10} paddingInline={4}>
+          <VStack gap={2} align="center">
+            <Icon icon="funnel" size="lg" color="disabled" />
+            <Text type="body" color="secondary" justify="center" as="p">
+              Select a namespace to view {resourceLabel}
+            </Text>
+          </VStack>
 
-        <Autocomplete
-          options={namespaces}
-          fullWidth
-          size="small"
-          onChange={(_, value) => value && onSelectNamespace(value)}
-          renderInput={(params) => <TextField {...params} label="Namespace" placeholder="Choose a namespace" />}
-        />
+          <Typeahead
+            label="Namespace"
+            isLabelHidden
+            placeholder="Choose a namespace"
+            searchSource={namespaceSource}
+            value={null}
+            onChange={(item) => item && onSelectNamespace(item.label)}
+            hasEntriesOnFocus
+            maxMenuItems={Math.max(namespaces.length, 10)}
+          />
 
-        {nodes && onSelectNode && (
-          <>
-            <Divider flexItem sx={{ '&::before, &::after': { borderColor: 'divider' } }}>
-              <Typography variant="caption" color="text.disabled">or</Typography>
-            </Divider>
-            <Autocomplete
-              options={nodes}
-              fullWidth
-              size="small"
-              onChange={(_, value) => value && onSelectNode(value)}
-              renderInput={(params) => <TextField {...params} label="Node" placeholder="Choose a node" />}
-            />
-          </>
-        )}
-      </Box>
+          {nodes && onSelectNode && (
+            <>
+              <Divider label="or" />
+              <Typeahead
+                label="Node"
+                isLabelHidden
+                placeholder="Choose a node"
+                searchSource={nodeSource}
+                value={null}
+                onChange={(item) => item && onSelectNode(item.label)}
+                hasEntriesOnFocus
+                maxMenuItems={Math.max(nodes?.length ?? 0, 10)}
+              />
+            </>
+          )}
+        </VStack>
+      </Center>
     </PanelState>
   );
 }

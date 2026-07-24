@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['@kubernetes/client-node'],
-  },
+  serverExternalPackages: ['@kubernetes/client-node'],
   output: 'standalone', // Standalone server bundle for Docker + Electron packaging
   
   // Configure webpack to handle Node.js modules
