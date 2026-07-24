@@ -3,7 +3,7 @@
 import { RefObject, useEffect } from 'react';
 
 // Cmd/Ctrl+F focuses the given search input instead of the browser find bar.
-export function useFindShortcut(inputRef: RefObject<HTMLInputElement>) {
+export function useFindShortcut(inputRef: RefObject<HTMLInputElement | null>) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {

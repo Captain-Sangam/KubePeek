@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getNodes } from '../../../../lib/kubernetes-server';
 import { getDefaultContext, getDefaultContextName } from '../../../../lib/default-context';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { cluster: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ cluster: string }> }) {
+  const params = await props.params;
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
     return new NextResponse(null, {
@@ -20,17 +18,17 @@ export async function GET(
 
   // The cluster parameter might be URL-encoded, especially for EKS ARNs
   let cluster = decodeURIComponent(params.cluster);
-  
+
   // Get the default context name
   const defaultContextName = await getDefaultContextName();
-  
+
   // If we receive the default placeholder name, replace it with the actual current context
   if (cluster === defaultContextName) {
     const actualContext = await getDefaultContext();
     console.log(`API: Replacing ${defaultContextName} with actual context: ${actualContext}`);
     cluster = actualContext;
   }
-  
+
   console.log(`API: Getting nodes for cluster ${cluster}`);
 
   try {

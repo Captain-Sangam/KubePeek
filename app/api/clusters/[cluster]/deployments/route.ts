@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listDeployments, isAuthError } from '../../../../lib/kubernetes-server';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { cluster: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ cluster: string }> }) {
+  const params = await props.params;
   try {
     const { cluster } = params;
     if (!cluster) {

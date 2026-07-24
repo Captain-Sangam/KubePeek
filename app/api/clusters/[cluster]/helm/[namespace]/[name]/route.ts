@@ -3,8 +3,9 @@ import { getHelmRelease } from '../../../../../../lib/helm-server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { cluster: string; namespace: string; name: string } }
+  props: { params: Promise<{ cluster: string; namespace: string; name: string }> }
 ) {
+  const params = await props.params;
   try {
     const { cluster, namespace, name } = params;
 

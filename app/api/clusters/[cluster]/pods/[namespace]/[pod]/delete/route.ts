@@ -3,8 +3,9 @@ import { deletePod } from '../../../../../../../lib/kubernetes-server';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { cluster: string; namespace: string; pod: string } }
+  props: { params: Promise<{ cluster: string; namespace: string; pod: string }> }
 ) {
+  const params = await props.params;
   try {
     const { cluster, namespace, pod } = params;
     const result = await deletePod(cluster, namespace, pod);
