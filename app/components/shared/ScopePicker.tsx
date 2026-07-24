@@ -57,6 +57,7 @@ export default function ScopePicker({
             value={null}
             onChange={(item) => item && onSelectNamespace(item.label)}
             hasEntriesOnFocus
+            maxMenuItems={Math.max(namespaces.length, 10)}
           />
 
           {nodes && onSelectNode && (
@@ -70,6 +71,7 @@ export default function ScopePicker({
                 value={null}
                 onChange={(item) => item && onSelectNode(item.label)}
                 hasEntriesOnFocus
+                maxMenuItems={Math.max(nodes?.length ?? 0, 10)}
               />
             </>
           )}

@@ -5,8 +5,7 @@
 // free localhost port, then point a BrowserWindow at it. This means the same
 // code powers the Docker image and the native app.
 
-const { app, BrowserWindow, shell } = require('electron');
-const { spawn } = require('child_process');
+const { app, BrowserWindow, shell, utilityProcess } = require('electron');
 const net = require('net');
 const path = require('path');
 const http = require('http');
@@ -42,11 +41,13 @@ function startServer(port) {
   // `dev` npm script) and ELECTRON_START_URL points at it.
   if (process.env.ELECTRON_START_URL) return;
 
+  // utilityProcess (not child_process.spawn + ELECTRON_RUN_AS_NODE): a spawned
+  // Electron-as-node child gets its own "exec" Dock icon on macOS.
   const serverJs = path.join(process.resourcesPath, 'server', 'server.js');
-  serverProcess = spawn(process.execPath, [serverJs], {
+  serverProcess = utilityProcess.fork(serverJs, [], {
+    serviceName: 'kubepeek-next-server',
     env: {
       ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
       PORT: String(port),
       HOSTNAME: '127.0.0.1',
@@ -54,8 +55,9 @@ function startServer(port) {
     stdio: 'inherit',
   });
 
-  serverProcess.on('error', (err) => {
-    console.error('Failed to start Next server:', err);
+  serverProcess.on('exit', (code) => {
+    if (code !== 0) console.error(`Next server exited with code ${code}`);
+    serverProcess = null;
   });
 }
 
@@ -88,11 +90,13 @@ async function createWindow() {
     minWidth: 900,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
+    show: false, // shown on ready-to-show; avoids a white window while the server boots
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+  mainWindow.once('ready-to-show', () => mainWindow.show());
 
   // Open external links in the default browser rather than a new window.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -113,10 +117,9 @@ app.whenReady().then(async () => {
   serverPort = await findFreePort();
   startServer(serverPort);
   await createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+}).catch((err) => {
+  console.error('Startup failed:', err);
+  app.quit();
 });
 
 function stopServer() {
@@ -128,7 +131,10 @@ function stopServer() {
 
 app.on('before-quit', stopServer);
 
+// Single-window app whose backend dies with the window: closing it quits on
+// every platform. (The old darwin keep-alive killed the server but left the
+// app running; reopening from the Dock then hung on a dead server — white
+// window until force quit.)
 app.on('window-all-closed', () => {
-  stopServer();
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
