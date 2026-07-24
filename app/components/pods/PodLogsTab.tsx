@@ -3,18 +3,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Button, IconButton, Select, MenuItem, FormControl, CircularProgress,
-  Typography, Tooltip, Fab, FormControlLabel, Switch,
+  Typography, Tooltip, Fab, FormControlLabel, Switch, TextField, InputAdornment,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
   ViewSidebar as ViewSidebarIcon,
   KeyboardArrowDown as ArrowDownIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import {
   type ParsedLine, parseLine, formatTimestamp, levelColor,
   discoverKeys, renderLineContent, computeDefaultKeys,
 } from '../../lib/log-parsing';
 import { Pod, Cluster } from '../../types/kubernetes';
+import { useFindShortcut } from '../../hooks/useFindShortcut';
 import LogFieldsSidebar from '../logs/LogFieldsSidebar';
 
 const TAIL_OPTIONS = ['100', '500', '1000', '2000'] as const;
@@ -37,6 +39,10 @@ export default function PodLogsTab({ cluster, pod, containers }: PodLogsTabProps
   const [discoveredKeys, setDiscoveredKeys] = useState<string[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [keySearch, setKeySearch] = useState('');
+
+  const [logSearch, setLogSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFindShortcut(searchRef);
 
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -106,6 +112,10 @@ export default function PodLogsTab({ cluster, pod, containers }: PodLogsTabProps
     });
   };
 
+  const visibleLines = logSearch
+    ? lines.filter((l) => l.raw.toLowerCase().includes(logSearch.toLowerCase()))
+    : lines;
+
   const filteredKeys = keySearch
     ? discoveredKeys.filter((k) => k.toLowerCase().includes(keySearch.toLowerCase()))
     : discoveredKeys;
@@ -157,7 +167,19 @@ export default function PodLogsTab({ cluster, pod, containers }: PodLogsTabProps
           label={<Typography variant="caption">Previous</Typography>}
           sx={{ ml: 0 }}
         />
-        <Box sx={{ flex: 1 }} />
+        <TextField
+          variant="outlined"
+          size="small"
+          placeholder="Search logs..."
+          inputRef={searchRef}
+          value={logSearch}
+          onChange={(e) => setLogSearch(e.target.value)}
+          sx={{ flex: 1, minWidth: 160, '& .MuiInputBase-root': { height: 30 } }}
+          InputProps={{
+            startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>),
+            style: { fontSize: '0.75rem' },
+          }}
+        />
         <Tooltip title="Refresh" arrow>
           <IconButton size="small" onClick={fetchLogs} disabled={loading}>
             {loading ? <CircularProgress size={14} /> : <RefreshIcon fontSize="small" />}
@@ -189,9 +211,11 @@ export default function PodLogsTab({ cluster, pod, containers }: PodLogsTabProps
             <Box sx={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'error.main', px: 2, textAlign: 'center' }}>
               <Typography variant="body2">{error}</Typography>
             </Box>
-          ) : lines.length === 0 ? (
+          ) : visibleLines.length === 0 ? (
             <Box sx={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
-              <Typography variant="body2">No logs available</Typography>
+              <Typography variant="body2">
+                {lines.length === 0 ? 'No logs available' : 'No lines match your search'}
+              </Typography>
             </Box>
           ) : (
             <>
@@ -206,7 +230,7 @@ export default function PodLogsTab({ cluster, pod, containers }: PodLogsTabProps
                   bgcolor: (theme) => (theme.palette.mode === 'light' ? 'grey.50' : '#161616'),
                 }}
               >
-                {lines.map((line, i) => {
+                {visibleLines.map((line, i) => {
                   const color = levelColor(line.level);
                   return (
                     <Box

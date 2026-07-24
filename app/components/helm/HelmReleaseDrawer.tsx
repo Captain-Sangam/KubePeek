@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Drawer, Box, Typography, Chip, IconButton, Tabs, Tab,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  TextField, InputAdornment,
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Search as SearchIcon } from '@mui/icons-material';
 import { HelmReleaseSummary, HelmReleaseDetail, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
+import { useFindShortcut } from '../../hooks/useFindShortcut';
 import { formatAge, formatFullTimestamp } from '../../lib/format';
 import TabPanel from '../shared/TabPanel';
 import PanelState from '../shared/PanelState';
@@ -42,11 +44,11 @@ function toYaml(obj: unknown, indent = 0): string {
     .join('\n');
 }
 
-function CodeBlock({ text }: { text: string }) {
+function CodeBlock({ text, copyText }: { text: string; copyText?: string }) {
   return (
     <Box sx={{ position: 'relative' }}>
       <Box sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1 }}>
-        <CopyButton value={text} title="Copy" />
+        <CopyButton value={copyText ?? text} title="Copy" />
       </Box>
       <Box
         component="pre"
@@ -64,10 +66,23 @@ function CodeBlock({ text }: { text: string }) {
 
 export default function HelmReleaseDrawer({ cluster, release, open, onClose }: HelmReleaseDrawerProps) {
   const [tab, setTab] = useState(0);
+  const [search, setSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFindShortcut(searchRef);
 
   useEffect(() => {
-    if (open) setTab(0);
+    if (open) {
+      setTab(0);
+      setSearch('');
+    }
   }, [open, release?.name]);
+
+  // Grep-style line filter for the Values/Manifest code blocks.
+  const filterLines = (text: string) => {
+    if (!search) return text;
+    const q = search.toLowerCase();
+    return text.split('\n').filter((l) => l.toLowerCase().includes(q)).join('\n') || '(no matching lines)';
+  };
 
   const url = open && release
     ? `/api/clusters/${encodeURIComponent(cluster.name)}/helm/${encodeURIComponent(release.namespace)}/${encodeURIComponent(release.name)}`
@@ -105,15 +120,34 @@ export default function HelmReleaseDrawer({ cluster, release, open, onClose }: H
             </Tabs>
           </Box>
 
+          {(tab === 0 || tab === 1) && (
+            <Box sx={{ px: 2, pt: 1.5, flexShrink: 0 }}>
+              <TextField
+                variant="outlined"
+                size="small"
+                fullWidth
+                placeholder="Search..."
+                inputRef={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                sx={{ '& .MuiInputBase-root': { height: 32 } }}
+                InputProps={{
+                  startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>),
+                  style: { fontSize: '0.8rem' },
+                }}
+              />
+            </Box>
+          )}
+
           <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 2 }}>
             <PanelState loading={loading} error={error} onRetry={refetch}>
               {detail && (
                 <>
                   <TabPanel value={tab} index={0}>
-                    <CodeBlock text={toYaml(detail.values)} />
+                    <CodeBlock text={filterLines(toYaml(detail.values))} copyText={toYaml(detail.values)} />
                   </TabPanel>
                   <TabPanel value={tab} index={1}>
-                    <CodeBlock text={detail.manifest} />
+                    <CodeBlock text={filterLines(detail.manifest)} copyText={detail.manifest} />
                   </TabPanel>
                   <TabPanel value={tab} index={2}>
                     <TableContainer component={Paper} variant="outlined">

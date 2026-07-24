@@ -32,7 +32,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
 ];
 
 interface NavTreeProps {
-  activeView: ActiveView;
+  activeView: ActiveView | null;
   onNavigate: (view: ActiveView) => void;
   collapsed?: boolean;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Chip, TextField, InputAdornment, TableSortLabel, Box,
@@ -9,6 +9,7 @@ import {
 import { Search as SearchIcon } from '@mui/icons-material';
 import { HelmReleaseSummary, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
+import { useFindShortcut } from '../../hooks/useFindShortcut';
 import { formatAge, formatFullTimestamp } from '../../lib/format';
 import PanelState from '../shared/PanelState';
 import ScopePicker from '../shared/ScopePicker';
@@ -37,6 +38,8 @@ export default function HelmReleasesTable({
   const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
   const [selected, setSelected] = useState<HelmReleaseSummary | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFindShortcut(searchRef);
 
   const { data, loading, error, authError, refetch } = useFetch<HelmReleaseSummary[]>(
     namespace
@@ -99,6 +102,7 @@ export default function HelmReleasesTable({
           variant="outlined"
           size="small"
           placeholder="Search releases..."
+          inputRef={searchRef}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           sx={{ flex: 1, minWidth: 180, '& .MuiInputBase-root': { height: 32 } }}

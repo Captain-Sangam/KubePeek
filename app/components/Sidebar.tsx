@@ -13,7 +13,7 @@ interface SidebarProps {
   loading: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  activeView: ActiveView;
+  activeView: ActiveView | null;
   onNavigate: (view: ActiveView) => void;
 }
 
