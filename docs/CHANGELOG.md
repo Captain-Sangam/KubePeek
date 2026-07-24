@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+- **New design system**: the entire UI moved from Material-UI (MUI v5 + Emotion) to [astryx](https://github.com/facebook/astryx) (`@astryxdesign/core`, neutral theme) — dense tables with sticky headers that fill the pane, native dropdowns/dialogs, Lucide icons. Dark/light mode behavior is unchanged. Pod/Helm detail panels are now edge-pinned dialogs; cluster rename moved into the cluster dropdown menu; the top bar is a slim drag strip with just the theme toggle.
+- **Framework upgrade**: Next.js 14 → 15 and React 18 → 19 (required by astryx). API route handlers now use async `params`.
+
 ### Added
 - **Tabbed main pane**: every sidebar view opens as a closable tab (one per view). Open tabs keep their state (search, sort, namespace, data) when hidden; new namespace-scoped tabs seed from the last selected namespace; closing a tab resets its scope. Replaces the single-view switching and the redundant cluster-name header row.
 - **Deployments, Ingresses, and HPA views** under Workloads — namespace-scoped, searchable, sortable tables following the Secrets pattern (`autoscaling/v2` for HPA targets).
