@@ -1,6 +1,6 @@
 # KubePeek — notes for coding agents
 
-Lens-style Kubernetes viewer: Next.js 14 (App Router, TypeScript, MUI v5) shipped as an Electron macOS app and a Docker image. Read `docs/architecture.md` before structural changes; `docs/CONTRIBUTING.md` has the step-by-step recipe for adding a new resource view.
+Lens-style Kubernetes viewer: Next.js 15 (App Router, TypeScript, React 19, astryx design system) shipped as an Electron macOS app and a Docker image. Read `docs/architecture.md` before structural changes; `docs/CONTRIBUTING.md` has the step-by-step recipe for adding a new resource view.
 
 ## Layer boundary (hard rule)
 
@@ -10,8 +10,11 @@ Lens-style Kubernetes viewer: Next.js 14 (App Router, TypeScript, MUI v5) shippe
 
 - Views live in `app/components/<area>/`; reuse `shared/` primitives (`PanelState`, `ScopePicker`, `UsageBar`, `StatusChip`, `CopyButton`) and hooks (`useFetch`, `useFindShortcut` for Cmd+F).
 - The main pane is tabbed: `Dashboard` owns `openTabs`/`activeTab`; `ClusterDetails` owns per-view namespace state, the tab strip, and keeps open tabs mounted (`display: none`). New namespace-scoped views must be added to `nsViews` there to get last-namespace seeding for free.
-- Styling is MUI `sx` (dense: 32px inputs, 0.75rem table cells). Tailwind is configured but unused — don't introduce it.
-- Theme/dark mode: `app/lib/ThemeProvider.tsx` (localStorage + `dark-theme` class on `<html>`).
+- Styling is astryx (`@astryxdesign/core` 0.1.8, exact-pinned — beta; bump both astryx packages together and run `npx astryx upgrade --apply`). Dense look: `size="sm"`/`density="compact"` variants. See the ASTRYX section below for the component workflow. Don't introduce Tailwind.
+- Tables: data-driven `Table` + `useTableSortableState` (see `secrets/SecretsTable.tsx` as template); clickable rows via `shared/tableRowClick.ts`; sticky headers via the `.kp-table-scroll` class in `globals.css`. Expandable rows use children mode (`NodesTable.tsx`).
+- Drawers are edge-positioned `Dialog`s (`position={{top:0,right:0,bottom:0}}`, see `pods/PodDetailDrawer.tsx`) — astryx has no Drawer.
+- Icons: semantic names on `Icon` where they exist, else `lucide-react` components.
+- Theme/dark mode: `app/lib/ThemeProvider.tsx` (astryx `<Theme mode>`; localStorage + `dark-theme` class on `<html>` for the legacy CSS vars in `globals.css`).
 
 ## Functionality changes
 
