@@ -7,7 +7,15 @@ export interface Cluster {
 }
 
 // Which resource view the sidebar has selected.
-export type ActiveView = 'nodeGroups' | 'nodes' | 'pods' | 'helm' | 'secrets';
+export type ActiveView =
+  | 'nodeGroups'
+  | 'nodes'
+  | 'pods'
+  | 'helm'
+  | 'secrets'
+  | 'ingresses'
+  | 'hpa'
+  | 'deployments';
 
 // The scope that gates the Pods view. Exactly one type is active at a time.
 export type PodsScope =
@@ -170,6 +178,40 @@ export interface SecretDetail {
   createdAt: string;
   labels?: Record<string, string>;
   data: Record<string, { value: string; encoding: 'utf8' | 'base64' }>;
+}
+
+export interface DeploymentSummary {
+  name: string;
+  namespace: string;
+  ready: string; // "2/3"
+  readyCount: number;
+  desired: number;
+  upToDate: number;
+  available: number;
+  createdAt: string;
+  age: string;
+}
+
+export interface IngressSummary {
+  name: string;
+  namespace: string;
+  className: string;
+  hosts: string[];
+  address: string;
+  createdAt: string;
+  age: string;
+}
+
+export interface HpaSummary {
+  name: string;
+  namespace: string;
+  reference: string; // "Deployment/foo"
+  targets: string; // "cpu: 62%/80%"
+  minReplicas: number;
+  maxReplicas: number;
+  currentReplicas: number;
+  createdAt: string;
+  age: string;
 }
 
 export interface HelmReleaseSummary {

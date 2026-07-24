@@ -7,6 +7,9 @@ import NodesTable from './NodesTable';
 import PodsTable from './PodsTable';
 import SecretsTable from './secrets/SecretsTable';
 import HelmReleasesTable from './helm/HelmReleasesTable';
+import DeploymentsTable from './workloads/DeploymentsTable';
+import IngressesTable from './workloads/IngressesTable';
+import HpaTable from './workloads/HpaTable';
 import PanelState from './shared/PanelState';
 import ScopePicker from './shared/ScopePicker';
 import ReconnectBanner from './shared/ReconnectBanner';
@@ -19,6 +22,9 @@ const TAB_LABELS: Record<ActiveView, string> = {
   pods: 'Pods',
   helm: 'Helm',
   secrets: 'Secrets',
+  ingresses: 'Ingresses',
+  hpa: 'HPA',
+  deployments: 'Deployments',
 };
 
 interface ClusterDetailsProps {
@@ -33,17 +39,32 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
   const [podsScope, setPodsScope] = useState<PodsScope | null>(null);
   const [helmNamespace, setHelmNamespace] = useState<string | null>(null);
   const [secretsNamespace, setSecretsNamespace] = useState<string | null>(null);
+  const [ingressesNamespace, setIngressesNamespace] = useState<string | null>(null);
+  const [hpaNamespace, setHpaNamespace] = useState<string | null>(null);
+  const [deploymentsNamespace, setDeploymentsNamespace] = useState<string | null>(null);
   const [lastNamespace, setLastNamespace] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
 
   const base = `/api/clusters/${encodeURIComponent(cluster.name)}`;
 
+  // Every namespace-scoped view except pods (which uses a scope object).
+  const nsViews: [ActiveView, string | null, (ns: string | null) => void][] = [
+    ['helm', helmNamespace, setHelmNamespace],
+    ['secrets', secretsNamespace, setSecretsNamespace],
+    ['ingresses', ingressesNamespace, setIngressesNamespace],
+    ['hpa', hpaNamespace, setHpaNamespace],
+    ['deployments', deploymentsNamespace, setDeploymentsNamespace],
+  ];
+
   // Reset per-cluster scope when the cluster changes.
   useEffect(() => {
     setPodsScope(null);
     setHelmNamespace(null);
     setSecretsNamespace(null);
+    setIngressesNamespace(null);
+    setHpaNamespace(null);
+    setDeploymentsNamespace(null);
     setLastNamespace(null);
     setAuthExpired(false);
   }, [cluster.name]);
@@ -55,20 +76,17 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
     const prev = prevTabsRef.current;
     prevTabsRef.current = openTabs;
     if (prev.includes('pods') && !openTabs.includes('pods')) setPodsScope(null);
-    if (prev.includes('helm') && !openTabs.includes('helm')) setHelmNamespace(null);
-    if (prev.includes('secrets') && !openTabs.includes('secrets')) setSecretsNamespace(null);
-    if (lastNamespace) {
-      if (!prev.includes('pods') && openTabs.includes('pods') && !podsScope)
-        setPodsScope({ type: 'namespace', value: lastNamespace });
-      if (!prev.includes('helm') && openTabs.includes('helm') && !helmNamespace)
-        setHelmNamespace(lastNamespace);
-      if (!prev.includes('secrets') && openTabs.includes('secrets') && !secretsNamespace)
-        setSecretsNamespace(lastNamespace);
+    else if (lastNamespace && !prev.includes('pods') && openTabs.includes('pods') && !podsScope)
+      setPodsScope({ type: 'namespace', value: lastNamespace });
+    for (const [view, ns, setNs] of nsViews) {
+      if (prev.includes(view) && !openTabs.includes(view)) setNs(null);
+      else if (lastNamespace && !prev.includes(view) && openTabs.includes(view) && !ns)
+        setNs(lastNamespace);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTabs]);
 
-  const needsNamespaces = openTabs.some((v) => v === 'pods' || v === 'helm' || v === 'secrets');
+  const needsNamespaces = openTabs.some((v) => v !== 'nodes' && v !== 'nodeGroups');
   const needsNodes = openTabs.some((v) => v === 'nodes' || v === 'nodeGroups' || v === 'pods');
 
   const nodesQ = useFetch<Node[]>(needsNodes ? `${base}/nodes` : null);
@@ -217,6 +235,57 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
             namespacesError={namespacesQ.error}
             onNamespaceChange={(ns) => {
               setHelmNamespace(ns);
+              setLastNamespace(ns);
+            }}
+            onRetryNamespaces={namespacesQ.refetch}
+            onAuthError={handleAuthError}
+          />
+        );
+      case 'ingresses':
+        return (
+          <IngressesTable
+            key={`ingresses-${reloadNonce}`}
+            cluster={cluster}
+            namespace={ingressesNamespace}
+            namespaces={namespaces}
+            namespacesLoading={namespacesQ.loading}
+            namespacesError={namespacesQ.error}
+            onNamespaceChange={(ns) => {
+              setIngressesNamespace(ns);
+              setLastNamespace(ns);
+            }}
+            onRetryNamespaces={namespacesQ.refetch}
+            onAuthError={handleAuthError}
+          />
+        );
+      case 'hpa':
+        return (
+          <HpaTable
+            key={`hpa-${reloadNonce}`}
+            cluster={cluster}
+            namespace={hpaNamespace}
+            namespaces={namespaces}
+            namespacesLoading={namespacesQ.loading}
+            namespacesError={namespacesQ.error}
+            onNamespaceChange={(ns) => {
+              setHpaNamespace(ns);
+              setLastNamespace(ns);
+            }}
+            onRetryNamespaces={namespacesQ.refetch}
+            onAuthError={handleAuthError}
+          />
+        );
+      case 'deployments':
+        return (
+          <DeploymentsTable
+            key={`deployments-${reloadNonce}`}
+            cluster={cluster}
+            namespace={deploymentsNamespace}
+            namespaces={namespaces}
+            namespacesLoading={namespacesQ.loading}
+            namespacesError={namespacesQ.error}
+            onNamespaceChange={(ns) => {
+              setDeploymentsNamespace(ns);
               setLastNamespace(ns);
             }}
             onRetryNamespaces={namespacesQ.refetch}

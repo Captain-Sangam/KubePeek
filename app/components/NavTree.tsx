@@ -3,6 +3,7 @@
 import { List, ListItemButton, ListItemIcon, ListItemText, Typography, Box, Divider, Tooltip } from '@mui/material';
 import {
   WorkspacesOutlined, DnsOutlined, ViewInArOutlined, SailingOutlined, KeyOutlined,
+  AltRouteOutlined, SpeedOutlined, LayersOutlined,
 } from '@mui/icons-material';
 import { ActiveView } from '../types/kubernetes';
 import { useTheme } from '../lib/ThemeProvider';
@@ -27,6 +28,9 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { view: 'pods', label: 'Pods', icon: <ViewInArOutlined fontSize="small" /> },
       { view: 'helm', label: 'Helm', icon: <SailingOutlined fontSize="small" /> },
       { view: 'secrets', label: 'Secrets', icon: <KeyOutlined fontSize="small" /> },
+      { view: 'ingresses', label: 'Ingresses', icon: <AltRouteOutlined fontSize="small" /> },
+      { view: 'hpa', label: 'HPA', icon: <SpeedOutlined fontSize="small" /> },
+      { view: 'deployments', label: 'Deployments', icon: <LayersOutlined fontSize="small" /> },
     ],
   },
 ];
