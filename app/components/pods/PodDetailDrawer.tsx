@@ -120,6 +120,7 @@ export default function PodDetailDrawer({ pod, cluster, open, onClose, onDeleted
             <TabPanel value={tab} index={2} sx={{ flex: 1, minHeight: 0, display: tab === 2 ? 'flex' : 'none', flexDirection: 'column' }}>
               {tab === 2 && (
                 <PodLogsTab
+                  key={`${pod.namespace}/${pod.name}`}
                   cluster={cluster}
                   pod={pod}
                   containers={detail?.containers.map((c) => c.name)}

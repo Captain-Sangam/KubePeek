@@ -27,21 +27,28 @@ To develop the UI in a plain browser without Electron, run `npm run dev:web` and
 
 ```
 app/
-  api/clusters/**        Next.js API routes (thin; delegate to lib)
+  api/clusters/**        Next.js API routes (thin; delegate to lib; server-only)
   lib/
-    kubernetes-server.ts  All Kubernetes reads + client/kubeconfig handling
-    helm-server.ts        Helm release decoding (no helm binary)
+    kubernetes-server.ts  All Kubernetes reads + client/kubeconfig handling (server-only)
+    helm-server.ts        Helm release decoding, no helm binary (server-only)
+    kubernetes-client.ts  Browser-side helpers (localStorage prefs, display names)
+    ThemeProvider.tsx     MUI theme + light/dark mode (client)
     format.ts             Numeric parsing, usage colors, age formatting
     log-parsing.ts        Log line + JSON field parsing (logs fields filter)
-    useFetch is under app/hooks/
+  hooks/
+    useFetch.ts           Fetch with abort, lazy enable (null URL), authError flag
+    useFindShortcut.ts    Cmd/Ctrl+F focuses a search input (visible-tab aware)
   components/
-    shared/               UsageBar, TabPanel, StatusChip, CopyButton, PanelState
-    nodes/ pods/ logs/ secrets/ helm/
-  types/kubernetes.ts     Shared TypeScript interfaces
+    shared/               UsageBar, TabPanel, StatusChip, CopyButton, PanelState,
+                          ScopePicker, ReconnectBanner
+    nodes/ pods/ logs/ secrets/ helm/ workloads/
+  types/kubernetes.ts     Shared TypeScript interfaces (incl. ActiveView)
 electron/main.js          Electron main process (spawns the standalone server)
 electron-builder.yml      Packaging config (ad-hoc signed, mac dir target)
 Dockerfile                Multi-stage production image
 ```
+
+**Layer boundary**: components and hooks never import `kubernetes-server.ts`/`helm-server.ts` — they talk to the API routes with `useFetch`/`fetch`. Only `app/api/**` imports the server libs. Keep it that way; the server libs pull in Node-only modules (`fs`, kubeconfig, exec-auth) that must not reach the client bundle.
 
 ## Packaging the native app
 

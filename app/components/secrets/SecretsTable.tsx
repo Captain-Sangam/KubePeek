@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Chip, TextField, InputAdornment, TableSortLabel, Box,
-  FormControl, Select, MenuItem, InputLabel,
+  FormControl, Select, MenuItem, InputLabel, FormControlLabel, Checkbox, Typography,
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 import { SecretSummary, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
+import { useFindShortcut } from '../../hooks/useFindShortcut';
 import { formatAge, formatFullTimestamp } from '../../lib/format';
 import PanelState from '../shared/PanelState';
 import ScopePicker from '../shared/ScopePicker';
@@ -35,7 +36,10 @@ export default function SecretsTable({
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showTls, setShowTls] = useState(false);
   const [selected, setSelected] = useState<SecretSummary | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFindShortcut(searchRef);
 
   const { data, loading, error, authError, refetch } = useFetch<SecretSummary[]>(
     namespace
@@ -69,6 +73,7 @@ export default function SecretsTable({
   }
 
   const filtered = secrets.filter((s) => {
+    if (!showTls && s.type === 'kubernetes.io/tls') return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return s.name.toLowerCase().includes(q) || s.namespace.toLowerCase().includes(q) || s.type.toLowerCase().includes(q);
@@ -98,6 +103,7 @@ export default function SecretsTable({
           variant="outlined"
           size="small"
           placeholder="Search secrets..."
+          inputRef={searchRef}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           sx={{ flex: 1, minWidth: 180, '& .MuiInputBase-root': { height: 32 } }}
@@ -114,6 +120,11 @@ export default function SecretsTable({
             ))}
           </Select>
         </FormControl>
+        <FormControlLabel
+          control={<Checkbox size="small" checked={showTls} onChange={(e) => setShowTls(e.target.checked)} />}
+          label={<Typography variant="caption">Show TLS</Typography>}
+          sx={{ ml: 0, mr: 0 }}
+        />
       </Box>
 
       <PanelState loading={loading} error={error} empty={!loading && !error && secrets.length === 0} emptyMessage={`No secrets in namespace "${namespace}"`} onRetry={refetch}>

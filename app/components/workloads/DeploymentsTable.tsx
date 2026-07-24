@@ -3,23 +3,21 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Chip, TextField, InputAdornment, TableSortLabel, Box,
+  Paper, TextField, InputAdornment, TableSortLabel, Box,
   FormControl, Select, MenuItem, InputLabel,
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
-import { HelmReleaseSummary, Cluster } from '../../types/kubernetes';
+import { DeploymentSummary, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
 import { useFindShortcut } from '../../hooks/useFindShortcut';
 import { formatAge, formatFullTimestamp } from '../../lib/format';
 import PanelState from '../shared/PanelState';
 import ScopePicker from '../shared/ScopePicker';
-import StatusChip from '../shared/StatusChip';
-import HelmReleaseDrawer from './HelmReleaseDrawer';
 
 type Order = 'asc' | 'desc';
-type SortKey = 'name' | 'namespace' | 'chart' | 'appVersion' | 'revision' | 'status' | 'updated';
+type SortKey = 'name' | 'readyCount' | 'upToDate' | 'available' | 'createdAt';
 
-interface HelmReleasesTableProps {
+interface DeploymentsTableProps {
   cluster: Cluster;
   namespace: string | null;
   namespaces: string[];
@@ -30,23 +28,22 @@ interface HelmReleasesTableProps {
   onAuthError: () => void;
 }
 
-export default function HelmReleasesTable({
+export default function DeploymentsTable({
   cluster, namespace, namespaces, namespacesLoading, namespacesError,
   onNamespaceChange, onRetryNamespaces, onAuthError,
-}: HelmReleasesTableProps) {
+}: DeploymentsTableProps) {
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selected, setSelected] = useState<HelmReleaseSummary | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   useFindShortcut(searchRef);
 
-  const { data, loading, error, authError, refetch } = useFetch<HelmReleaseSummary[]>(
+  const { data, loading, error, authError, refetch } = useFetch<DeploymentSummary[]>(
     namespace
-      ? `/api/clusters/${encodeURIComponent(cluster.name)}/helm?namespace=${encodeURIComponent(namespace)}`
+      ? `/api/clusters/${encodeURIComponent(cluster.name)}/deployments?namespace=${encodeURIComponent(namespace)}`
       : null
   );
-  const releases = useMemo(() => data || [], [data]);
+  const deployments = useMemo(() => data || [], [data]);
 
   useEffect(() => {
     if (authError) onAuthError();
@@ -62,7 +59,7 @@ export default function HelmReleasesTable({
   if (!namespace) {
     return (
       <ScopePicker
-        resourceLabel="Helm releases"
+        resourceLabel="deployments"
         namespaces={namespaces}
         loading={namespacesLoading}
         error={namespacesError}
@@ -72,10 +69,10 @@ export default function HelmReleasesTable({
     );
   }
 
-  const filtered = releases.filter((r) => {
+  const filtered = deployments.filter((d) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return r.name.toLowerCase().includes(q) || r.namespace.toLowerCase().includes(q) || r.chart.toLowerCase().includes(q);
+    return d.name.toLowerCase().includes(q) || d.namespace.toLowerCase().includes(q);
   });
 
   const cmp = (a: number | string, b: number | string) =>
@@ -83,12 +80,16 @@ export default function HelmReleasesTable({
 
   const sorted = [...filtered].sort((a, b) => {
     switch (orderBy) {
-      case 'revision':
-        return cmp(a.revision, b.revision);
-      case 'updated':
-        return cmp(a.updated || '', b.updated || '');
+      case 'readyCount':
+        return cmp(a.readyCount, b.readyCount);
+      case 'upToDate':
+        return cmp(a.upToDate, b.upToDate);
+      case 'available':
+        return cmp(a.available, b.available);
+      case 'createdAt':
+        return cmp(a.createdAt || '', b.createdAt || '');
       default:
-        return cmp(String(a[orderBy]).toLowerCase(), String(b[orderBy]).toLowerCase());
+        return cmp(a.name.toLowerCase(), b.name.toLowerCase());
     }
   });
 
@@ -101,7 +102,7 @@ export default function HelmReleasesTable({
         <TextField
           variant="outlined"
           size="small"
-          placeholder="Search releases..."
+          placeholder="Search deployments..."
           inputRef={searchRef}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -121,12 +122,12 @@ export default function HelmReleasesTable({
         </FormControl>
       </Box>
 
-      <PanelState loading={loading} error={error} empty={!loading && !error && releases.length === 0} emptyMessage={`No Helm releases in namespace "${namespace}"`} onRetry={refetch}>
+      <PanelState loading={loading} error={error} empty={!loading && !error && deployments.length === 0} emptyMessage={`No deployments in namespace "${namespace}"`} onRetry={refetch}>
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 250px)' }}>
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                {([['name', 'Release'], ['namespace', 'Namespace'], ['chart', 'Chart'], ['appVersion', 'App Version'], ['revision', 'Rev'], ['status', 'Status'], ['updated', 'Updated']] as [SortKey, string][]).map(([id, label]) => (
+                {([['name', 'Name'], ['readyCount', 'Ready'], ['upToDate', 'Up-to-date'], ['available', 'Available'], ['createdAt', 'Age']] as [SortKey, string][]).map(([id, label]) => (
                   <TableCell key={id} sx={headSx} sortDirection={orderBy === id ? order : false}>
                     <TableSortLabel active={orderBy === id} direction={orderBy === id ? order : 'asc'} onClick={() => handleSort(id)}>
                       {label}
@@ -136,23 +137,19 @@ export default function HelmReleasesTable({
               </TableRow>
             </TableHead>
             <TableBody>
-              {sorted.map((r) => (
-                <TableRow key={`${r.namespace}-${r.name}`} hover onClick={() => setSelected(r)} sx={{ cursor: 'pointer' }}>
-                  <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.name}>{r.name}</TableCell>
-                  <TableCell sx={cellSx}><Chip label={r.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} /></TableCell>
-                  <TableCell sx={cellSx}>{r.chart}{r.chartVersion ? `-${r.chartVersion}` : ''}</TableCell>
-                  <TableCell sx={cellSx}>{r.appVersion || '—'}</TableCell>
-                  <TableCell sx={cellSx}>{r.revision}</TableCell>
-                  <TableCell sx={cellSx}><StatusChip status={r.status} /></TableCell>
-                  <TableCell sx={cellSx} title={formatFullTimestamp(r.updated)}>{formatAge(r.updated)}</TableCell>
+              {sorted.map((d) => (
+                <TableRow key={`${d.namespace}-${d.name}`} hover>
+                  <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={d.name}>{d.name}</TableCell>
+                  <TableCell sx={{ ...cellSx, color: d.readyCount < d.desired ? 'warning.main' : undefined }}>{d.ready}</TableCell>
+                  <TableCell sx={cellSx}>{d.upToDate}</TableCell>
+                  <TableCell sx={cellSx}>{d.available}</TableCell>
+                  <TableCell sx={cellSx} title={formatFullTimestamp(d.createdAt)}>{formatAge(d.createdAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
       </PanelState>
-
-      <HelmReleaseDrawer cluster={cluster} release={selected} open={!!selected} onClose={() => setSelected(null)} />
     </>
   );
 }

@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button,
-  Box, Typography, Chip, IconButton, CircularProgress, Tooltip,
+  Box, Typography, Chip, IconButton, CircularProgress, Tooltip, TextField, InputAdornment,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
   Close as CloseIcon,
   DeleteOutline as DeleteIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { SecretSummary, SecretDetail, Cluster } from '../../types/kubernetes';
+import { useFindShortcut } from '../../hooks/useFindShortcut';
 import CopyButton from '../shared/CopyButton';
 
 interface SecretDetailDialogProps {
@@ -29,12 +31,16 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
   const [revealed, setRevealed] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [keyQuery, setKeyQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFindShortcut(searchRef);
 
   // Reset when the dialog target changes.
   useEffect(() => {
     setDetail(null);
     setRevealed(false);
     setError(null);
+    setKeyQuery('');
   }, [secret?.name, secret?.namespace]);
 
   // Fetch decoded values on first reveal (cached afterward).
@@ -83,6 +89,15 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
 
   if (!secret) return null;
 
+  const q = keyQuery.toLowerCase();
+  const visibleKeys = keyQuery
+    ? secret.keys.filter(
+        (k) =>
+          k.toLowerCase().includes(q) ||
+          (revealed && (detail?.data[k]?.value ?? '').toLowerCase().includes(q))
+      )
+    : secret.keys;
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ pb: 1 }}>
@@ -120,11 +135,30 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
           <Chip label={secret.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
           <Chip label={secret.type} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
         </Box>
+        {secret.keys.length > 0 && (
+          <TextField
+            variant="outlined"
+            size="small"
+            fullWidth
+            placeholder="Search keys..."
+            inputRef={searchRef}
+            value={keyQuery}
+            onChange={(e) => setKeyQuery(e.target.value)}
+            sx={{ mt: 1, '& .MuiInputBase-root': { height: 32 } }}
+            InputProps={{
+              startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>),
+              style: { fontSize: '0.8rem' },
+            }}
+          />
+        )}
       </DialogTitle>
       <DialogContent dividers>
         {error && <Typography variant="body2" color="error" sx={{ mb: 1 }}>{error}</Typography>}
         {secret.keys.length === 0 && (
           <Typography variant="body2" color="text.secondary">This secret has no data keys.</Typography>
+        )}
+        {secret.keys.length > 0 && visibleKeys.length === 0 && (
+          <Typography variant="body2" color="text.secondary">No keys match</Typography>
         )}
         {/* Responsive grid: one column on narrow, up to three on wide screens.
             Long-valued secrets (30+ keys) fill horizontal space instead of one tall list. */}
@@ -139,7 +173,7 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
             },
           }}
         >
-          {secret.keys.map((key) => {
+          {visibleKeys.map((key) => {
             const entry = detail?.data[key];
             return (
               <Box key={key} sx={{ minWidth: 0 }}>

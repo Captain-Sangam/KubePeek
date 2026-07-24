@@ -15,6 +15,9 @@ import {
   PodEvent,
   SecretSummary,
   SecretDetail,
+  DeploymentSummary,
+  IngressSummary,
+  HpaSummary,
 } from '../types/kubernetes';
 
 // Minimal shape of the options object passed to kc.applyToRequest / fetchWithoutCertValidation.
@@ -408,6 +411,8 @@ export const getClientForCluster = (clusterName: string): {
   coreClient: k8s.CoreV1Api;
   metricsClient: any;
   appsClient: k8s.AppsV1Api;
+  networkingClient: k8s.NetworkingV1Api;
+  autoscalingClient: k8s.AutoscalingV2Api;
 } => {
   const kc = loadKubeConfig();
   const availableContexts = kc.getContexts().map(c => c.name);
@@ -527,8 +532,10 @@ export const getClientForCluster = (clusterName: string): {
   }
   
   const appsClient = kc.makeApiClient(k8s.AppsV1Api);
-  
-  return { coreClient, metricsClient, appsClient };
+  const networkingClient = kc.makeApiClient(k8s.NetworkingV1Api);
+  const autoscalingClient = kc.makeApiClient(k8s.AutoscalingV2Api);
+
+  return { coreClient, metricsClient, appsClient, networkingClient, autoscalingClient };
 };
 
 // Get nodes for a cluster
@@ -1474,6 +1481,119 @@ export const listNamespaces = async (clusterName: string): Promise<string[]> => 
     .map(ns => ns.metadata?.name || '')
     .filter(Boolean)
     .sort();
+};
+
+// List deployments in a namespace (or all namespaces).
+export const listDeployments = async (
+  clusterName: string,
+  namespace?: string
+): Promise<DeploymentSummary[]> => {
+  const { appsClient } = getClientForCluster(clusterName);
+
+  const resp = namespace
+    ? await appsClient.listNamespacedDeployment(namespace)
+    : await appsClient.listDeploymentForAllNamespaces();
+
+  return resp.body.items
+    .map(d => {
+      const desired = d.spec?.replicas ?? 0;
+      const readyCount = d.status?.readyReplicas ?? 0;
+      const createdAt = d.metadata?.creationTimestamp
+        ? new Date(d.metadata.creationTimestamp).toISOString()
+        : '';
+      return {
+        name: d.metadata?.name || 'unknown',
+        namespace: d.metadata?.namespace || 'default',
+        ready: `${readyCount}/${desired}`,
+        readyCount,
+        desired,
+        upToDate: d.status?.updatedReplicas ?? 0,
+        available: d.status?.availableReplicas ?? 0,
+        createdAt,
+        age: relativeAge(createdAt)
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+// List ingresses in a namespace (or all namespaces).
+export const listIngresses = async (
+  clusterName: string,
+  namespace?: string
+): Promise<IngressSummary[]> => {
+  const { networkingClient } = getClientForCluster(clusterName);
+
+  const resp = namespace
+    ? await networkingClient.listNamespacedIngress(namespace)
+    : await networkingClient.listIngressForAllNamespaces();
+
+  return resp.body.items
+    .map(ing => {
+      const createdAt = ing.metadata?.creationTimestamp
+        ? new Date(ing.metadata.creationTimestamp).toISOString()
+        : '';
+      const address = (ing.status?.loadBalancer?.ingress || [])
+        .map(lb => lb.hostname || lb.ip || '')
+        .filter(Boolean)
+        .join(', ');
+      return {
+        name: ing.metadata?.name || 'unknown',
+        namespace: ing.metadata?.namespace || 'default',
+        className:
+          ing.spec?.ingressClassName ||
+          ing.metadata?.annotations?.['kubernetes.io/ingress.class'] ||
+          '',
+        hosts: (ing.spec?.rules || []).map(r => r.host || '*').filter(Boolean),
+        address,
+        createdAt,
+        age: relativeAge(createdAt)
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+// List horizontal pod autoscalers (autoscaling/v2) in a namespace (or all).
+export const listHpas = async (
+  clusterName: string,
+  namespace?: string
+): Promise<HpaSummary[]> => {
+  const { autoscalingClient } = getClientForCluster(clusterName);
+
+  const resp = namespace
+    ? await autoscalingClient.listNamespacedHorizontalPodAutoscaler(namespace)
+    : await autoscalingClient.listHorizontalPodAutoscalerForAllNamespaces();
+
+  return resp.body.items
+    .map(h => {
+      const createdAt = h.metadata?.creationTimestamp
+        ? new Date(h.metadata.creationTimestamp).toISOString()
+        : '';
+      // Compact "cpu: 62%/80%" per resource metric; other metric types by name.
+      const targets = (h.spec?.metrics || [])
+        .map(m => {
+          if (m.type === 'Resource' && m.resource) {
+            const current = h.status?.currentMetrics?.find(
+              c => c.type === 'Resource' && c.resource?.name === m.resource?.name
+            )?.resource?.current?.averageUtilization;
+            const target = m.resource.target?.averageUtilization;
+            return `${m.resource.name}: ${current ?? '—'}%/${target ?? '—'}%`;
+          }
+          return m.type.toLowerCase();
+        })
+        .join(', ');
+      return {
+        name: h.metadata?.name || 'unknown',
+        namespace: h.metadata?.namespace || 'default',
+        reference: `${h.spec?.scaleTargetRef?.kind || '?'}/${h.spec?.scaleTargetRef?.name || '?'}`,
+        targets,
+        minReplicas: h.spec?.minReplicas ?? 1,
+        maxReplicas: h.spec?.maxReplicas ?? 0,
+        currentReplicas: h.status?.currentReplicas ?? 0,
+        createdAt,
+        age: relativeAge(createdAt)
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 };
 
 // List secrets across namespaces (or one namespace). Values are NOT included.

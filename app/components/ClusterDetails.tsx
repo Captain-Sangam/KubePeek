@@ -1,55 +1,96 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Box, Typography, IconButton, Tooltip } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Box, Tabs, Tab, Typography } from '@mui/material';
+import { Close as CloseIcon } from '@mui/icons-material';
 import NodesTable from './NodesTable';
 import PodsTable from './PodsTable';
 import SecretsTable from './secrets/SecretsTable';
 import HelmReleasesTable from './helm/HelmReleasesTable';
+import DeploymentsTable from './workloads/DeploymentsTable';
+import IngressesTable from './workloads/IngressesTable';
+import HpaTable from './workloads/HpaTable';
 import PanelState from './shared/PanelState';
 import ScopePicker from './shared/ScopePicker';
 import ReconnectBanner from './shared/ReconnectBanner';
 import { Cluster, Node, Pod, NodeGroupInfo, ActiveView, PodsScope } from '../types/kubernetes';
 import { useFetch } from '../hooks/useFetch';
 
+const TAB_LABELS: Record<ActiveView, string> = {
+  nodeGroups: 'Node Groups',
+  nodes: 'Nodes',
+  pods: 'Pods',
+  helm: 'Helm',
+  secrets: 'Secrets',
+  ingresses: 'Ingresses',
+  hpa: 'HPA',
+  deployments: 'Deployments',
+};
+
 interface ClusterDetailsProps {
   cluster: Cluster;
-  activeView: ActiveView;
+  openTabs: ActiveView[];
+  activeTab: ActiveView | null;
   onNavigate: (view: ActiveView) => void;
+  onCloseTab: (view: ActiveView) => void;
 }
 
-export default function ClusterDetails({ cluster, activeView, onNavigate }: ClusterDetailsProps) {
+export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigate, onCloseTab }: ClusterDetailsProps) {
   const [podsScope, setPodsScope] = useState<PodsScope | null>(null);
   const [helmNamespace, setHelmNamespace] = useState<string | null>(null);
   const [secretsNamespace, setSecretsNamespace] = useState<string | null>(null);
-  const [visitedViews, setVisitedViews] = useState<Set<ActiveView>>(new Set([activeView]));
+  const [ingressesNamespace, setIngressesNamespace] = useState<string | null>(null);
+  const [hpaNamespace, setHpaNamespace] = useState<string | null>(null);
+  const [deploymentsNamespace, setDeploymentsNamespace] = useState<string | null>(null);
+  const [lastNamespace, setLastNamespace] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
 
   const base = `/api/clusters/${encodeURIComponent(cluster.name)}`;
+
+  // Every namespace-scoped view except pods (which uses a scope object).
+  const nsViews: [ActiveView, string | null, (ns: string | null) => void][] = [
+    ['helm', helmNamespace, setHelmNamespace],
+    ['secrets', secretsNamespace, setSecretsNamespace],
+    ['ingresses', ingressesNamespace, setIngressesNamespace],
+    ['hpa', hpaNamespace, setHpaNamespace],
+    ['deployments', deploymentsNamespace, setDeploymentsNamespace],
+  ];
 
   // Reset per-cluster scope when the cluster changes.
   useEffect(() => {
     setPodsScope(null);
     setHelmNamespace(null);
     setSecretsNamespace(null);
-    setVisitedViews(new Set([activeView]));
+    setIngressesNamespace(null);
+    setHpaNamespace(null);
+    setDeploymentsNamespace(null);
+    setLastNamespace(null);
     setAuthExpired(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cluster.name]);
 
-  // Track which views have been opened so their data stays available.
+  // Tab lifecycle: closed tabs drop their scope (so reopening re-seeds);
+  // newly opened tabs with no scope yet default to the last selected namespace.
+  const prevTabsRef = useRef<ActiveView[]>(openTabs);
   useEffect(() => {
-    setVisitedViews((prev) => (prev.has(activeView) ? prev : new Set(prev).add(activeView)));
-  }, [activeView]);
+    const prev = prevTabsRef.current;
+    prevTabsRef.current = openTabs;
+    if (prev.includes('pods') && !openTabs.includes('pods')) setPodsScope(null);
+    else if (lastNamespace && !prev.includes('pods') && openTabs.includes('pods') && !podsScope)
+      setPodsScope({ type: 'namespace', value: lastNamespace });
+    for (const [view, ns, setNs] of nsViews) {
+      if (prev.includes(view) && !openTabs.includes(view)) setNs(null);
+      else if (lastNamespace && !prev.includes(view) && openTabs.includes(view) && !ns)
+        setNs(lastNamespace);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTabs]);
 
-  const needsNamespaces = activeView === 'pods' || activeView === 'helm' || activeView === 'secrets';
-  const needsNodes =
-    visitedViews.has('nodes') || visitedViews.has('nodeGroups') || activeView === 'pods';
+  const needsNamespaces = openTabs.some((v) => v !== 'nodes' && v !== 'nodeGroups');
+  const needsNodes = openTabs.some((v) => v === 'nodes' || v === 'nodeGroups' || v === 'pods');
 
   const nodesQ = useFetch<Node[]>(needsNodes ? `${base}/nodes` : null);
-  const nodeGroupsQ = useFetch<NodeGroupInfo[]>(visitedViews.has('nodeGroups') ? `${base}/nodegroups` : null);
+  const nodeGroupsQ = useFetch<NodeGroupInfo[]>(openTabs.includes('nodeGroups') ? `${base}/nodegroups` : null);
   const namespacesQ = useFetch<string[]>(needsNamespaces ? `${base}/namespaces` : null);
 
   const podsUrl = podsScope
@@ -99,8 +140,8 @@ export default function ClusterDetails({ cluster, activeView, onNavigate }: Clus
     [nodesQ.data]
   );
 
-  const renderView = () => {
-    switch (activeView) {
+  const renderView = (view: ActiveView) => {
+    switch (view) {
       case 'nodeGroups':
         return (
           <PanelState
@@ -141,7 +182,10 @@ export default function ClusterDetails({ cluster, activeView, onNavigate }: Clus
               loading={namespacesQ.loading}
               error={namespacesQ.error}
               onRetry={namespacesQ.refetch}
-              onSelectNamespace={(ns) => setPodsScope({ type: 'namespace', value: ns })}
+              onSelectNamespace={(ns) => {
+                setPodsScope({ type: 'namespace', value: ns });
+                setLastNamespace(ns);
+              }}
               nodes={nodeNames}
               onSelectNode={(node) => setPodsScope({ type: 'node', value: node })}
             />
@@ -153,7 +197,10 @@ export default function ClusterDetails({ cluster, activeView, onNavigate }: Clus
               pods={podsQ.data || []}
               cluster={cluster}
               scope={podsScope}
-              onScopeChange={setPodsScope}
+              onScopeChange={(s) => {
+                setPodsScope(s);
+                if (s?.type === 'namespace') setLastNamespace(s.value);
+              }}
               namespaces={namespaces}
               nodeNames={nodeNames}
               onPodDeleted={podsQ.refetch}
@@ -169,7 +216,10 @@ export default function ClusterDetails({ cluster, activeView, onNavigate }: Clus
             namespaces={namespaces}
             namespacesLoading={namespacesQ.loading}
             namespacesError={namespacesQ.error}
-            onNamespaceChange={setSecretsNamespace}
+            onNamespaceChange={(ns) => {
+              setSecretsNamespace(ns);
+              setLastNamespace(ns);
+            }}
             onRetryNamespaces={namespacesQ.refetch}
             onAuthError={handleAuthError}
           />
@@ -183,7 +233,61 @@ export default function ClusterDetails({ cluster, activeView, onNavigate }: Clus
             namespaces={namespaces}
             namespacesLoading={namespacesQ.loading}
             namespacesError={namespacesQ.error}
-            onNamespaceChange={setHelmNamespace}
+            onNamespaceChange={(ns) => {
+              setHelmNamespace(ns);
+              setLastNamespace(ns);
+            }}
+            onRetryNamespaces={namespacesQ.refetch}
+            onAuthError={handleAuthError}
+          />
+        );
+      case 'ingresses':
+        return (
+          <IngressesTable
+            key={`ingresses-${reloadNonce}`}
+            cluster={cluster}
+            namespace={ingressesNamespace}
+            namespaces={namespaces}
+            namespacesLoading={namespacesQ.loading}
+            namespacesError={namespacesQ.error}
+            onNamespaceChange={(ns) => {
+              setIngressesNamespace(ns);
+              setLastNamespace(ns);
+            }}
+            onRetryNamespaces={namespacesQ.refetch}
+            onAuthError={handleAuthError}
+          />
+        );
+      case 'hpa':
+        return (
+          <HpaTable
+            key={`hpa-${reloadNonce}`}
+            cluster={cluster}
+            namespace={hpaNamespace}
+            namespaces={namespaces}
+            namespacesLoading={namespacesQ.loading}
+            namespacesError={namespacesQ.error}
+            onNamespaceChange={(ns) => {
+              setHpaNamespace(ns);
+              setLastNamespace(ns);
+            }}
+            onRetryNamespaces={namespacesQ.refetch}
+            onAuthError={handleAuthError}
+          />
+        );
+      case 'deployments':
+        return (
+          <DeploymentsTable
+            key={`deployments-${reloadNonce}`}
+            cluster={cluster}
+            namespace={deploymentsNamespace}
+            namespaces={namespaces}
+            namespacesLoading={namespacesQ.loading}
+            namespacesError={namespacesQ.error}
+            onNamespaceChange={(ns) => {
+              setDeploymentsNamespace(ns);
+              setLastNamespace(ns);
+            }}
             onRetryNamespaces={namespacesQ.refetch}
             onAuthError={handleAuthError}
           />
@@ -193,30 +297,62 @@ export default function ClusterDetails({ cluster, activeView, onNavigate }: Clus
 
   return (
     <Box sx={{ height: '100%' }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.5 }}>
-        <Box>
-          <Typography variant="subtitle1" sx={{ mb: 0.5, fontSize: '1rem', fontWeight: 600 }}>
-            {cluster.displayName || cluster.name}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-            {cluster.server}
-            {cluster.displayName && (
-              <Box component="span" sx={{ ml: 1, color: 'text.disabled' }}>
-                (Original name: {cluster.name})
-              </Box>
-            )}
-          </Typography>
-        </Box>
-        <Tooltip title="Reconnect (refresh credentials)" arrow>
-          <IconButton size="small" onClick={handleReconnect} sx={{ p: 0.5 }}>
-            <RefreshIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
       {authExpired && <ReconnectBanner cluster={cluster} onReconnect={handleReconnect} />}
 
-      <Box sx={{ pt: 1 }}>{renderView()}</Box>
+      {openTabs.length > 0 && (
+        <Tabs
+          value={activeTab ?? false}
+          onChange={(_, v) => onNavigate(v)}
+          sx={{
+            minHeight: 36,
+            borderBottom: 1,
+            borderColor: 'divider',
+            '& .MuiTab-root': { minHeight: 36, fontSize: '0.8rem', textTransform: 'none', py: 0.5 },
+          }}
+        >
+          {openTabs.map((view) => (
+            <Tab
+              key={view}
+              value={view}
+              disableRipple
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  {TAB_LABELS[view]}
+                  {/* Plain SVG, not IconButton — a button can't nest inside Tab's button. */}
+                  <CloseIcon
+                    aria-label={`Close ${TAB_LABELS[view]}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseTab(view);
+                    }}
+                    sx={{
+                      fontSize: 14,
+                      borderRadius: '50%',
+                      color: 'text.disabled',
+                      '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
+                    }}
+                  />
+                </Box>
+              }
+            />
+          ))}
+        </Tabs>
+      )}
+
+      <Box sx={{ pt: 1 }}>
+        {openTabs.map((view) => (
+          <Box key={view} sx={{ display: view === activeTab ? 'block' : 'none' }}>
+            {renderView(view)}
+          </Box>
+        ))}
+        {openTabs.length === 0 && (
+          <Box sx={{ py: 8, textAlign: 'center' }}>
+            <Typography variant="body1" fontSize="0.9rem" color="text.secondary">
+              Pick a view from the sidebar
+            </Typography>
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }

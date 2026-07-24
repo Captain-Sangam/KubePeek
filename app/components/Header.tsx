@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { Box, IconButton, Typography, Tooltip } from '@mui/material';
 import { useTheme } from '../lib/ThemeProvider';
 import LightModeIcon from '@mui/icons-material/LightMode';
@@ -9,10 +10,11 @@ export default function Header() {
   const { mode, toggleTheme } = useTheme();
 
   return (
-    <Box 
-      sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
+    <Box
+      style={{ WebkitAppRegion: 'drag' } as CSSProperties}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: 'space-between',
         px: 3,
         py: 2,
@@ -34,10 +36,11 @@ export default function Header() {
       </Typography>
       
       <Tooltip title={`Switch to ${mode === 'light' ? 'dark' : 'light'} mode`}>
-        <IconButton 
-          onClick={toggleTheme} 
+        <IconButton
+          onClick={toggleTheme}
           size="small"
-          sx={{ 
+          style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
+          sx={{
             p: 1,
             backgroundColor: mode === 'light' 
               ? 'rgba(0, 0, 0, 0.1)' 

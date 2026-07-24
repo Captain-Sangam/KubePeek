@@ -3,23 +3,21 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Chip, TextField, InputAdornment, TableSortLabel, Box,
+  Paper, TextField, InputAdornment, TableSortLabel, Box,
   FormControl, Select, MenuItem, InputLabel,
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
-import { HelmReleaseSummary, Cluster } from '../../types/kubernetes';
+import { IngressSummary, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
 import { useFindShortcut } from '../../hooks/useFindShortcut';
 import { formatAge, formatFullTimestamp } from '../../lib/format';
 import PanelState from '../shared/PanelState';
 import ScopePicker from '../shared/ScopePicker';
-import StatusChip from '../shared/StatusChip';
-import HelmReleaseDrawer from './HelmReleaseDrawer';
 
 type Order = 'asc' | 'desc';
-type SortKey = 'name' | 'namespace' | 'chart' | 'appVersion' | 'revision' | 'status' | 'updated';
+type SortKey = 'name' | 'className' | 'hosts' | 'address' | 'createdAt';
 
-interface HelmReleasesTableProps {
+interface IngressesTableProps {
   cluster: Cluster;
   namespace: string | null;
   namespaces: string[];
@@ -30,23 +28,22 @@ interface HelmReleasesTableProps {
   onAuthError: () => void;
 }
 
-export default function HelmReleasesTable({
+export default function IngressesTable({
   cluster, namespace, namespaces, namespacesLoading, namespacesError,
   onNamespaceChange, onRetryNamespaces, onAuthError,
-}: HelmReleasesTableProps) {
+}: IngressesTableProps) {
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selected, setSelected] = useState<HelmReleaseSummary | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   useFindShortcut(searchRef);
 
-  const { data, loading, error, authError, refetch } = useFetch<HelmReleaseSummary[]>(
+  const { data, loading, error, authError, refetch } = useFetch<IngressSummary[]>(
     namespace
-      ? `/api/clusters/${encodeURIComponent(cluster.name)}/helm?namespace=${encodeURIComponent(namespace)}`
+      ? `/api/clusters/${encodeURIComponent(cluster.name)}/ingresses?namespace=${encodeURIComponent(namespace)}`
       : null
   );
-  const releases = useMemo(() => data || [], [data]);
+  const ingresses = useMemo(() => data || [], [data]);
 
   useEffect(() => {
     if (authError) onAuthError();
@@ -62,7 +59,7 @@ export default function HelmReleasesTable({
   if (!namespace) {
     return (
       <ScopePicker
-        resourceLabel="Helm releases"
+        resourceLabel="ingresses"
         namespaces={namespaces}
         loading={namespacesLoading}
         error={namespacesError}
@@ -72,10 +69,15 @@ export default function HelmReleasesTable({
     );
   }
 
-  const filtered = releases.filter((r) => {
+  const filtered = ingresses.filter((ing) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return r.name.toLowerCase().includes(q) || r.namespace.toLowerCase().includes(q) || r.chart.toLowerCase().includes(q);
+    return (
+      ing.name.toLowerCase().includes(q) ||
+      ing.className.toLowerCase().includes(q) ||
+      ing.address.toLowerCase().includes(q) ||
+      ing.hosts.some((h) => h.toLowerCase().includes(q))
+    );
   });
 
   const cmp = (a: number | string, b: number | string) =>
@@ -83,10 +85,10 @@ export default function HelmReleasesTable({
 
   const sorted = [...filtered].sort((a, b) => {
     switch (orderBy) {
-      case 'revision':
-        return cmp(a.revision, b.revision);
-      case 'updated':
-        return cmp(a.updated || '', b.updated || '');
+      case 'hosts':
+        return cmp(a.hosts.join(',').toLowerCase(), b.hosts.join(',').toLowerCase());
+      case 'createdAt':
+        return cmp(a.createdAt || '', b.createdAt || '');
       default:
         return cmp(String(a[orderBy]).toLowerCase(), String(b[orderBy]).toLowerCase());
     }
@@ -101,7 +103,7 @@ export default function HelmReleasesTable({
         <TextField
           variant="outlined"
           size="small"
-          placeholder="Search releases..."
+          placeholder="Search ingresses..."
           inputRef={searchRef}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -121,12 +123,12 @@ export default function HelmReleasesTable({
         </FormControl>
       </Box>
 
-      <PanelState loading={loading} error={error} empty={!loading && !error && releases.length === 0} emptyMessage={`No Helm releases in namespace "${namespace}"`} onRetry={refetch}>
+      <PanelState loading={loading} error={error} empty={!loading && !error && ingresses.length === 0} emptyMessage={`No ingresses in namespace "${namespace}"`} onRetry={refetch}>
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 250px)' }}>
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                {([['name', 'Release'], ['namespace', 'Namespace'], ['chart', 'Chart'], ['appVersion', 'App Version'], ['revision', 'Rev'], ['status', 'Status'], ['updated', 'Updated']] as [SortKey, string][]).map(([id, label]) => (
+                {([['name', 'Name'], ['className', 'Class'], ['hosts', 'Hosts'], ['address', 'Address'], ['createdAt', 'Age']] as [SortKey, string][]).map(([id, label]) => (
                   <TableCell key={id} sx={headSx} sortDirection={orderBy === id ? order : false}>
                     <TableSortLabel active={orderBy === id} direction={orderBy === id ? order : 'asc'} onClick={() => handleSort(id)}>
                       {label}
@@ -136,23 +138,23 @@ export default function HelmReleasesTable({
               </TableRow>
             </TableHead>
             <TableBody>
-              {sorted.map((r) => (
-                <TableRow key={`${r.namespace}-${r.name}`} hover onClick={() => setSelected(r)} sx={{ cursor: 'pointer' }}>
-                  <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.name}>{r.name}</TableCell>
-                  <TableCell sx={cellSx}><Chip label={r.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} /></TableCell>
-                  <TableCell sx={cellSx}>{r.chart}{r.chartVersion ? `-${r.chartVersion}` : ''}</TableCell>
-                  <TableCell sx={cellSx}>{r.appVersion || '—'}</TableCell>
-                  <TableCell sx={cellSx}>{r.revision}</TableCell>
-                  <TableCell sx={cellSx}><StatusChip status={r.status} /></TableCell>
-                  <TableCell sx={cellSx} title={formatFullTimestamp(r.updated)}>{formatAge(r.updated)}</TableCell>
+              {sorted.map((ing) => (
+                <TableRow key={`${ing.namespace}-${ing.name}`} hover>
+                  <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ing.name}>{ing.name}</TableCell>
+                  <TableCell sx={{ ...cellSx, fontFamily: 'monospace', fontSize: '0.7rem' }}>{ing.className || '—'}</TableCell>
+                  <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }} title={ing.hosts.join(', ')}>
+                    {ing.hosts.join(', ') || '—'}
+                  </TableCell>
+                  <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }} title={ing.address}>
+                    {ing.address || '—'}
+                  </TableCell>
+                  <TableCell sx={cellSx} title={formatFullTimestamp(ing.createdAt)}>{formatAge(ing.createdAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
       </PanelState>
-
-      <HelmReleaseDrawer cluster={cluster} release={selected} open={!!selected} onClose={() => setSelected(null)} />
     </>
   );
 }

@@ -19,8 +19,23 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [collapsed, setCollapsed] = useState<boolean>(false);
-  const [activeView, setActiveView] = useState<ActiveView>('nodeGroups');
+  const [openTabs, setOpenTabs] = useState<ActiveView[]>(['pods']);
+  const [activeTab, setActiveTab] = useState<ActiveView | null>('pods');
   const { mode } = useTheme();
+
+  // Open-if-absent + focus; max one tab per view.
+  const handleNavigate = (view: ActiveView) => {
+    setOpenTabs((prev) => (prev.includes(view) ? prev : [...prev, view]));
+    setActiveTab(view);
+  };
+
+  const handleCloseTab = (view: ActiveView) => {
+    const idx = openTabs.indexOf(view);
+    const next = openTabs.filter((v) => v !== view);
+    setOpenTabs(next);
+    // Focus the right neighbor (slides into the closed slot), else left, else none.
+    if (activeTab === view) setActiveTab(next[Math.min(idx, next.length - 1)] ?? null);
+  };
 
   // Read collapse preference after mount to avoid a hydration mismatch.
   useEffect(() => {
@@ -156,8 +171,8 @@ export default function Dashboard() {
               loading={loading}
               collapsed={collapsed}
               onToggleCollapse={handleToggleCollapse}
-              activeView={activeView}
-              onNavigate={setActiveView}
+              activeView={activeTab}
+              onNavigate={handleNavigate}
             />
           </Paper>
         </Box>
@@ -177,8 +192,10 @@ export default function Dashboard() {
             {selectedCluster ? (
               <ClusterDetails
                 cluster={selectedCluster}
-                activeView={activeView}
-                onNavigate={setActiveView}
+                openTabs={openTabs}
+                activeTab={activeTab}
+                onNavigate={handleNavigate}
+                onCloseTab={handleCloseTab}
               />
             ) : (
               <Box
