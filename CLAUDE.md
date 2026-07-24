@@ -23,7 +23,7 @@ Lens-style Kubernetes viewer: Next.js 15 (App Router, TypeScript, React 19, astr
 
 ## Verify
 
-`make typecheck` (tsc) must pass; `npm run dev:web` for a browser-only smoke test, `make dev` for the real Electron app. There is no test suite and `next lint` is unconfigured — don't run it interactively.
+`make typecheck` (tsc) must pass; `npm run lint` (next/core-web-vitals) is the CI gate and must be clean; `npm run dev:web` for a browser-only smoke test, `make dev` for the real Electron app. There is no test suite.
 
 <!-- ASTRYX:START -->
 Astryx v0.1.8 · 153 components
