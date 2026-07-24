@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import {
-  Drawer, Box, Typography, Chip, IconButton, Tabs, Tab,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  TextField, InputAdornment,
-} from '@mui/material';
-import { Close as CloseIcon, Search as SearchIcon } from '@mui/icons-material';
+import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
+import { Tab, TabList } from '@astryxdesign/core/TabList';
+import { HStack } from '@astryxdesign/core/Stack';
+import { Token } from '@astryxdesign/core/Token';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { CodeBlock } from '@astryxdesign/core/CodeBlock';
+import { Table, proportional, pixel } from '@astryxdesign/core/Table';
 import { HelmReleaseSummary, HelmReleaseDetail, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
 import { useFindShortcut } from '../../hooks/useFindShortcut';
@@ -15,6 +16,8 @@ import TabPanel from '../shared/TabPanel';
 import PanelState from '../shared/PanelState';
 import StatusChip from '../shared/StatusChip';
 import CopyButton from '../shared/CopyButton';
+
+type HistoryRow = HelmReleaseDetail['history'][number] & Record<string, unknown>;
 
 interface HelmReleaseDrawerProps {
   cluster: Cluster;
@@ -44,23 +47,15 @@ function toYaml(obj: unknown, indent = 0): string {
     .join('\n');
 }
 
-function CodeBlock({ text, copyText }: { text: string; copyText?: string }) {
+// Copy always grabs the full text even when the view is grep-filtered.
+function YamlBlock({ text, copyText }: { text: string; copyText?: string }) {
   return (
-    <Box sx={{ position: 'relative' }}>
-      <Box sx={{ position: 'absolute', top: 4, right: 4, zIndex: 1 }}>
+    <div style={{ position: 'relative' }}>
+      <div style={{ position: 'absolute', top: 4, right: 4, zIndex: 1 }}>
         <CopyButton value={copyText ?? text} title="Copy" />
-      </Box>
-      <Box
-        component="pre"
-        sx={{
-          m: 0, p: 1.5, borderRadius: 1, bgcolor: 'action.hover',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: '0.72rem', overflow: 'auto', whiteSpace: 'pre',
-        }}
-      >
-        {text || '(empty)'}
-      </Box>
-    </Box>
+      </div>
+      <CodeBlock code={text || '(empty)'} language="yaml" hasLanguageLabel={false} hasCopyButton={false} size="sm" width="100%" />
+    </div>
   );
 }
 
@@ -91,98 +86,90 @@ export default function HelmReleaseDrawer({ cluster, release, open, onClose }: H
   const detail = data?.release;
 
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={onClose}
-      PaperProps={{ sx: { width: { xs: '100vw', md: '70vw', lg: 960 }, display: 'flex', flexDirection: 'column' } }}
+    // Right-edge Dialog stands in for the old MUI Drawer (astryx has none).
+    <Dialog
+      isOpen={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
+      }}
+      width="min(960px, 100vw)"
+      maxHeight="100vh"
+      position={{ top: 0, right: 0, bottom: 0 }}
+      style={{ height: '100vh' }}
     >
       {release && (
         <>
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, wordBreak: 'break-all' }}>{release.name}</Typography>
-              <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-              <Chip label={release.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
-              <StatusChip status={release.status} />
-              <Chip label={`rev ${release.revision}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-              <Chip label={`${release.chart}-${release.chartVersion}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-            </Box>
-          </Box>
+          <DialogHeader
+            title={release.name}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) onClose();
+            }}
+            hasDivider={false}
+          />
+          <HStack gap={1} wrap="wrap" vAlign="center" paddingInline={4} paddingBlock={1} style={{ flexShrink: 0 }}>
+            <Token label={release.namespace} size="sm" />
+            <StatusChip status={release.status} />
+            <Token label={`rev ${release.revision}`} size="sm" />
+            <Token label={`${release.chart}-${release.chartVersion}`} size="sm" />
+          </HStack>
 
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
-            <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, fontSize: '0.8rem' } }}>
-              <Tab label="Values" disableRipple />
-              <Tab label="Manifest" disableRipple />
-              <Tab label="History" disableRipple />
-            </Tabs>
-          </Box>
+          <div style={{ padding: '0 var(--spacing-4)', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+            <TabList value={String(tab)} onChange={(v) => setTab(Number(v))} size="sm">
+              <Tab value="0" label="Values" />
+              <Tab value="1" label="Manifest" />
+              <Tab value="2" label="History" />
+            </TabList>
+          </div>
 
           {(tab === 0 || tab === 1) && (
-            <Box sx={{ px: 2, pt: 1.5, flexShrink: 0 }}>
-              <TextField
-                variant="outlined"
-                size="small"
-                fullWidth
+            <div style={{ padding: 'var(--spacing-3) var(--spacing-4) 0', flexShrink: 0 }}>
+              <TextInput
+                label="Search"
+                isLabelHidden
+                size="sm"
                 placeholder="Search..."
-                inputRef={searchRef}
+                startIcon="search"
+                ref={searchRef}
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                sx={{ '& .MuiInputBase-root': { height: 32 } }}
-                InputProps={{
-                  startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>),
-                  style: { fontSize: '0.8rem' },
-                }}
+                onChange={(value) => setSearch(value)}
               />
-            </Box>
+            </div>
           )}
 
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 2 }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--spacing-4)' }}>
             <PanelState loading={loading} error={error} onRetry={refetch}>
               {detail && (
                 <>
                   <TabPanel value={tab} index={0}>
-                    <CodeBlock text={filterLines(toYaml(detail.values))} copyText={toYaml(detail.values)} />
+                    <YamlBlock text={filterLines(toYaml(detail.values))} copyText={toYaml(detail.values)} />
                   </TabPanel>
                   <TabPanel value={tab} index={1}>
-                    <CodeBlock text={filterLines(detail.manifest)} copyText={detail.manifest} />
+                    <YamlBlock text={filterLines(detail.manifest)} copyText={detail.manifest} />
                   </TabPanel>
                   <TabPanel value={tab} index={2}>
-                    <TableContainer component={Paper} variant="outlined">
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem' }}>Revision</TableCell>
-                            <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem' }}>Updated</TableCell>
-                            <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem' }}>Status</TableCell>
-                            <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem' }}>Chart</TableCell>
-                            <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem' }}>App</TableCell>
-                            <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem' }}>Description</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {detail.history.map((h) => (
-                            <TableRow key={h.revision}>
-                              <TableCell sx={{ fontSize: '0.72rem' }}>{h.revision}</TableCell>
-                              <TableCell sx={{ fontSize: '0.72rem' }} title={formatFullTimestamp(h.updated)}>{formatAge(h.updated)}</TableCell>
-                              <TableCell sx={{ fontSize: '0.72rem' }}><StatusChip status={h.status} /></TableCell>
-                              <TableCell sx={{ fontSize: '0.72rem' }}>{h.chartVersion}</TableCell>
-                              <TableCell sx={{ fontSize: '0.72rem' }}>{h.appVersion}</TableCell>
-                              <TableCell sx={{ fontSize: '0.72rem', whiteSpace: 'normal' }}>{h.description}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
+                    <Table<HistoryRow>
+                      data={detail.history as HistoryRow[]}
+                      idKey="revision"
+                      density="compact"
+                      columns={[
+                        { key: 'revision', header: 'Revision', width: pixel(80) },
+                        {
+                          key: 'updated', header: 'Updated', width: pixel(90),
+                          renderCell: (h) => <span title={formatFullTimestamp(h.updated)}>{formatAge(h.updated)}</span>,
+                        },
+                        { key: 'status', header: 'Status', width: pixel(110), renderCell: (h) => <StatusChip status={h.status} /> },
+                        { key: 'chartVersion', header: 'Chart', width: proportional(1) },
+                        { key: 'appVersion', header: 'App', width: proportional(1) },
+                        { key: 'description', header: 'Description', width: proportional(2) },
+                      ]}
+                    />
                   </TabPanel>
                 </>
               )}
             </PanelState>
-          </Box>
+          </div>
         </>
       )}
-    </Drawer>
+    </Dialog>
   );
 }

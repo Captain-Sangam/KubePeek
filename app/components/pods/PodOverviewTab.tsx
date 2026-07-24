@@ -1,6 +1,9 @@
 'use client';
 
-import { Box, Typography, Chip, Divider } from '@mui/material';
+import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
+import { Text } from '@astryxdesign/core/Text';
+import { Token } from '@astryxdesign/core/Token';
+import { Divider } from '@astryxdesign/core/Divider';
 import { PodDetail, ContainerDetail } from '../../types/kubernetes';
 import { basisLabel, formatAge, formatFullTimestamp } from '../../lib/format';
 import UsageBar from '../shared/UsageBar';
@@ -8,72 +11,85 @@ import StatusChip from '../shared/StatusChip';
 import CopyButton from '../shared/CopyButton';
 
 const SectionHeading = ({ children }: { children: React.ReactNode }) => (
-  <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mt: 2, mb: 0.5, fontWeight: 600 }}>
+  <Text
+    type="label"
+    size="2xs"
+    color="secondary"
+    weight="semibold"
+    as="p"
+    style={{ textTransform: 'uppercase', letterSpacing: '0.5px', margin: 'var(--spacing-4) 0 var(--spacing-1)' }}
+  >
     {children}
-  </Typography>
+  </Text>
 );
 
 const KeyValue = ({ label, value }: { label: string; value?: React.ReactNode }) => (
-  <Box sx={{ display: 'flex', gap: 1, py: 0.25 }}>
-    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 130, fontSize: '0.78rem' }}>
+  <HStack gap={2} paddingBlock={0.5}>
+    <Text type="supporting" size="2xs" as="div" style={{ minWidth: 130, flexShrink: 0 }}>
       {label}
-    </Typography>
-    <Typography variant="body2" component="div" sx={{ fontSize: '0.78rem', wordBreak: 'break-word' }}>
+    </Text>
+    <Text type="body" size="2xs" as="div" style={{ wordBreak: 'break-word' }}>
       {value ?? '—'}
-    </Typography>
-  </Box>
+    </Text>
+  </HStack>
 );
 
 function ContainerCard({ c }: { c: ContainerDetail }) {
   return (
-    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, mb: 1 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>{c.name}</Typography>
-          {c.isInit && <Chip label="init" size="small" sx={{ height: 18, fontSize: '0.6rem' }} />}
-          <StatusChip status={c.state.reason || c.state.type} />
-        </Box>
-        <Typography variant="caption" color="text.secondary">
+    <VStack
+      gap={1}
+      padding={3}
+      style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-element)', marginBottom: 'var(--spacing-2)' }}
+    >
+      <HStack gap={1} vAlign="center" wrap="wrap">
+        <StackItem size="fill">
+          <HStack gap={1} vAlign="center">
+            <Text type="body" size="2xs" weight="semibold">{c.name}</Text>
+            {c.isInit && <Token label="init" size="sm" />}
+            <StatusChip status={c.state.reason || c.state.type} />
+          </HStack>
+        </StackItem>
+        <Text type="supporting" size="2xs">
           {c.restartCount} restart{c.restartCount === 1 ? '' : 's'}
-        </Typography>
-      </Box>
+        </Text>
+      </HStack>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.image}>
-          {c.image}
-        </Typography>
+      <HStack gap={0.5} vAlign="center">
+        <StackItem size="fill">
+          <Text type="code" size="2xs" maxLines={1}>{c.image}</Text>
+        </StackItem>
         <CopyButton value={c.image} title="Copy image" />
-      </Box>
+      </HStack>
 
       {c.state.type === 'terminated' && c.state.exitCode != null && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+        <Text type="supporting" size="2xs" as="p">
           Exit code {c.state.exitCode}{c.state.reason ? ` (${c.state.reason})` : ''}
-        </Typography>
+        </Text>
       )}
 
-      <Box sx={{ display: 'flex', gap: 3, mt: 1, flexWrap: 'wrap' }}>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Requests</Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>
+      <HStack gap={4} wrap="wrap">
+        <VStack>
+          <Text type="supporting" size="2xs" as="p">Requests</Text>
+          <Text type="body" size="2xs" as="p">
             CPU {c.requests.cpu || '—'} · Mem {c.requests.memory || '—'}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Limits</Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>
+          </Text>
+        </VStack>
+        <VStack>
+          <Text type="supporting" size="2xs" as="p">Limits</Text>
+          <Text type="body" size="2xs" as="p">
             CPU {c.limits.cpu || '—'} · Mem {c.limits.memory || '—'}
-          </Typography>
-        </Box>
+          </Text>
+        </VStack>
         {c.usage && (
-          <Box>
-            <Typography variant="caption" color="text.secondary">Live usage</Typography>
-            <Typography variant="caption" sx={{ display: 'block' }}>
+          <VStack>
+            <Text type="supporting" size="2xs" as="p">Live usage</Text>
+            <Text type="body" size="2xs" as="p">
               CPU {c.usage.cpu} · Mem {c.usage.memory}
-            </Typography>
-          </Box>
+            </Text>
+          </VStack>
         )}
-      </Box>
-    </Box>
+      </HStack>
+    </VStack>
   );
 }
 
@@ -84,22 +100,15 @@ export default function PodOverviewTab({ detail }: { detail: PodDetail }) {
     detail.memoryBasis === 'limit' ? 'limit' : detail.memoryBasis === 'request' ? 'request' : 'node allocatable';
 
   return (
-    <Box>
+    <div>
       <SectionHeading>Status</SectionHeading>
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+      <HStack gap={1} wrap="wrap" style={{ marginBottom: 'var(--spacing-2)' }}>
         <StatusChip status={detail.phase} />
-        {detail.qosClass && <Chip label={`QoS: ${detail.qosClass}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />}
+        {detail.qosClass && <Token label={`QoS: ${detail.qosClass}`} size="sm" />}
         {detail.conditions.map((cond) => (
-          <Chip
-            key={cond.type}
-            label={cond.type}
-            size="small"
-            color={cond.status === 'True' ? 'success' : 'default'}
-            variant="outlined"
-            sx={{ height: 20, fontSize: '0.65rem' }}
-          />
+          <Token key={cond.type} label={cond.type} size="sm" color={cond.status === 'True' ? 'green' : 'gray'} />
         ))}
-      </Box>
+      </HStack>
       <KeyValue label="Node" value={detail.nodeName || '—'} />
       <KeyValue label="Node group" value={detail.nodeGroup || '—'} />
       <KeyValue label="Pod IP" value={detail.podIP} />
@@ -108,68 +117,66 @@ export default function PodOverviewTab({ detail }: { detail: PodDetail }) {
       <KeyValue label="Service account" value={detail.serviceAccountName} />
 
       <SectionHeading>Metrics</SectionHeading>
-      <Box sx={{ mb: 1 }}>
-        <Typography variant="caption" color="text.secondary">CPU</Typography>
+      <VStack gap={0.5} style={{ marginBottom: 'var(--spacing-2)' }}>
+        <Text type="supporting" size="2xs" as="p">CPU</Text>
         <UsageBar
           percent={detail.cpuPercent}
           caption={`${detail.cpuUsage} of ${cpuDenom}`}
           fallbackText={`${detail.cpuUsage} (no ${basisLabel('limit')}/request set)`}
-          height={8}
         />
-      </Box>
-      <Box sx={{ mb: 1 }}>
-        <Typography variant="caption" color="text.secondary">Memory</Typography>
+      </VStack>
+      <VStack gap={0.5} style={{ marginBottom: 'var(--spacing-2)' }}>
+        <Text type="supporting" size="2xs" as="p">Memory</Text>
         <UsageBar
           percent={detail.memoryPercent}
           caption={`${detail.memoryUsage} of ${memDenom}`}
           fallbackText={`${detail.memoryUsage} (no limit/request set)`}
-          height={8}
         />
-      </Box>
+      </VStack>
 
       <SectionHeading>Containers</SectionHeading>
       {detail.initContainers.map((c) => <ContainerCard key={`init-${c.name}`} c={c} />)}
       {detail.containers.map((c) => <ContainerCard key={c.name} c={c} />)}
 
       <SectionHeading>Metadata</SectionHeading>
-      <Typography variant="caption" color="text.secondary">Labels</Typography>
-      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1, mt: 0.5 }}>
+      <Text type="supporting" size="2xs" as="p">Labels</Text>
+      <HStack gap={0.5} wrap="wrap" paddingBlock={1}>
         {Object.entries(detail.labels).length > 0 ? (
           Object.entries(detail.labels).map(([k, v]) => (
-            <Chip key={k} label={`${k}=${v}`} size="small" sx={{ height: 20, fontSize: '0.6rem' }} />
+            <Token key={k} label={`${k}=${v}`} size="sm" />
           ))
         ) : (
-          <Typography variant="caption" color="text.secondary">None</Typography>
+          <Text type="supporting" size="2xs">None</Text>
         )}
-      </Box>
+      </HStack>
 
       {detail.ownerReferences.length > 0 && (
         <>
-          <Divider sx={{ my: 1 }} />
-          <Typography variant="caption" color="text.secondary">Owner references</Typography>
-          <Box sx={{ mt: 0.5 }}>
+          <Divider style={{ margin: 'var(--spacing-2) 0' }} />
+          <Text type="supporting" size="2xs" as="p">Owner references</Text>
+          <VStack paddingBlock={0.5}>
             {detail.ownerReferences.map((o) => (
-              <Typography key={`${o.kind}-${o.name}`} variant="caption" sx={{ display: 'block' }}>
+              <Text key={`${o.kind}-${o.name}`} type="body" size="2xs" as="p">
                 {o.kind}/{o.name}
-              </Typography>
+              </Text>
             ))}
-          </Box>
+          </VStack>
         </>
       )}
 
       {detail.volumes.length > 0 && (
         <>
-          <Divider sx={{ my: 1 }} />
-          <Typography variant="caption" color="text.secondary">Volumes</Typography>
-          <Box sx={{ mt: 0.5 }}>
+          <Divider style={{ margin: 'var(--spacing-2) 0' }} />
+          <Text type="supporting" size="2xs" as="p">Volumes</Text>
+          <VStack paddingBlock={0.5}>
             {detail.volumes.map((v) => (
-              <Typography key={v.name} variant="caption" sx={{ display: 'block' }}>
-                {v.name} <Box component="span" sx={{ color: 'text.secondary' }}>({v.type})</Box>
-              </Typography>
+              <Text key={v.name} type="body" size="2xs" as="p">
+                {v.name} <Text type="inherit" color="secondary">({v.type})</Text>
+              </Text>
             ))}
-          </Box>
+          </VStack>
         </>
       )}
-    </Box>
+    </div>
   );
 }

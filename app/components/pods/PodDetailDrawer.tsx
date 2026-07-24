@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  Drawer, Box, Typography, Chip, IconButton, Tabs, Tab, Tooltip,
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button,
-} from '@mui/material';
-import { Close as CloseIcon, DeleteOutline as DeleteIcon } from '@mui/icons-material';
+import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
+import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { Tab, TabList } from '@astryxdesign/core/TabList';
+import { HStack } from '@astryxdesign/core/Stack';
+import { Token } from '@astryxdesign/core/Token';
+import { IconButton } from '@astryxdesign/core/IconButton';
+import { Icon } from '@astryxdesign/core/Icon';
+import { Trash2 } from 'lucide-react';
 import { Pod, Cluster, PodDetail } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
 import StatusChip from '../shared/StatusChip';
@@ -59,93 +62,90 @@ export default function PodDetailDrawer({ pod, cluster, open, onClose, onDeleted
   };
 
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={onClose}
-      keepMounted={false}
-      PaperProps={{ sx: { width: { xs: '100vw', sm: 640, lg: 840 }, display: 'flex', flexDirection: 'column' } }}
-    >
-      {pod && (
-        <>
-          {/* Sticky header */}
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-              <Typography variant="subtitle1" sx={{ fontFamily: 'monospace', fontWeight: 600, wordBreak: 'break-all' }}>
-                {pod.name}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <Tooltip title="Delete pod" arrow>
-                  <IconButton size="small" color="error" onClick={() => setDeleteOpen(true)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <IconButton size="small" onClick={onClose}>
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Chip label={pod.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
+    <>
+      {/* Right-edge Dialog stands in for the old MUI Drawer (astryx has none). */}
+      <Dialog
+        isOpen={open}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) onClose();
+        }}
+        width="min(840px, 100vw)"
+        maxHeight="100vh"
+        position={{ top: 0, right: 0, bottom: 0 }}
+        style={{ height: '100vh' }}
+      >
+        {pod && (
+          <>
+            <DialogHeader
+              title={pod.name}
+              onOpenChange={(isOpen) => {
+                if (!isOpen) onClose();
+              }}
+              hasDivider={false}
+              endContent={
+                <IconButton
+                  label="Delete pod"
+                  tooltip="Delete pod"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteOpen(true)}
+                  icon={<Icon icon={Trash2} size="sm" color="error" />}
+                />
+              }
+            />
+            <HStack gap={1} wrap="wrap" vAlign="center" paddingInline={4} paddingBlock={1} style={{ flexShrink: 0 }}>
+              <Token label={pod.namespace} size="sm" />
               <StatusChip status={pod.status} />
               {(pod.restarts ?? 0) > 0 && (
-                <Chip
+                <Token
                   label={`${pod.restarts} restarts`}
-                  size="small"
-                  color={(pod.restarts ?? 0) > 10 ? 'error' : 'warning'}
-                  variant="outlined"
-                  sx={{ height: 20, fontSize: '0.65rem' }}
+                  size="sm"
+                  color={(pod.restarts ?? 0) > 10 ? 'red' : 'yellow'}
                 />
               )}
-            </Box>
-          </Box>
+            </HStack>
 
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
-            <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, fontSize: '0.8rem' } }}>
-              <Tab label="Overview" disableRipple />
-              <Tab label="Events" disableRipple />
-              <Tab label="Logs" disableRipple />
-            </Tabs>
-          </Box>
+            <div style={{ padding: '0 var(--spacing-4)', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+              <TabList value={String(tab)} onChange={(v) => setTab(Number(v))} size="sm">
+                <Tab value="0" label="Overview" />
+                <Tab value="1" label="Events" />
+                <Tab value="2" label="Logs" />
+              </TabList>
+            </div>
 
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <TabPanel value={tab} index={0} style={{ padding: 16 }}>
-              <PanelState loading={detailQ.loading} error={detailQ.error} onRetry={detailQ.refetch}>
-                {detail && <PodOverviewTab detail={detail} />}
-              </PanelState>
-            </TabPanel>
-            <TabPanel value={tab} index={1} style={{ padding: 16 }}>
-              {tab === 1 && <PodEventsTab cluster={cluster} pod={pod} />}
-            </TabPanel>
-            <TabPanel value={tab} index={2} style={{ flex: 1, minHeight: 0, display: tab === 2 ? 'flex' : 'none', flexDirection: 'column' }}>
-              {tab === 2 && (
-                <PodLogsTab
-                  key={`${pod.namespace}/${pod.name}`}
-                  cluster={cluster}
-                  pod={pod}
-                  containers={detail?.containers.map((c) => c.name)}
-                />
-              )}
-            </TabPanel>
-          </Box>
-        </>
-      )}
-
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
-        <DialogTitle>Delete pod?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            This will delete <strong>{pod?.name}</strong> in namespace <strong>{pod?.namespace}</strong>.
-            A controller may recreate it.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>
-            {deleting ? 'Deleting…' : 'Delete'}
-          </Button>
-        </DialogActions>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <TabPanel value={tab} index={0} style={{ padding: 'var(--spacing-4)' }}>
+                <PanelState loading={detailQ.loading} error={detailQ.error} onRetry={detailQ.refetch}>
+                  {detail && <PodOverviewTab detail={detail} />}
+                </PanelState>
+              </TabPanel>
+              <TabPanel value={tab} index={1} style={{ padding: 'var(--spacing-4)' }}>
+                {tab === 1 && <PodEventsTab cluster={cluster} pod={pod} />}
+              </TabPanel>
+              <TabPanel value={tab} index={2} style={{ flex: 1, minHeight: 0, display: tab === 2 ? 'flex' : 'none', flexDirection: 'column' }}>
+                {tab === 2 && (
+                  <PodLogsTab
+                    key={`${pod.namespace}/${pod.name}`}
+                    cluster={cluster}
+                    pod={pod}
+                    containers={detail?.containers.map((c) => c.name)}
+                  />
+                )}
+              </TabPanel>
+            </div>
+          </>
+        )}
       </Dialog>
-    </Drawer>
+
+      <AlertDialog
+        isOpen={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete pod?"
+        description={`This will delete ${pod?.name} in namespace ${pod?.namespace}. A controller may recreate it.`}
+        actionLabel="Delete"
+        isActionLoading={deleting}
+        onAction={handleDelete}
+      />
+    </>
   );
 }

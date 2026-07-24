@@ -1,38 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Chip, TextField, InputAdornment, TableSortLabel, Box, Tooltip,
-  FormControl, Select, MenuItem, InputLabel, Button,
-} from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { useState, useRef } from 'react';
+import { Table, proportional, pixel, useTableSortable, useTableSortableState } from '@astryxdesign/core/Table';
+import { HStack, StackItem } from '@astryxdesign/core/Stack';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { Selector } from '@astryxdesign/core/Selector';
+import { Token } from '@astryxdesign/core/Token';
+import { Text } from '@astryxdesign/core/Text';
+import { Button } from '@astryxdesign/core/Button';
 import { Pod, Cluster, PodsScope } from '../types/kubernetes';
 import { parseNumericValue, basisLabel } from '../lib/format';
+import { useFindShortcut } from '../hooks/useFindShortcut';
 import UsageBar from './shared/UsageBar';
 import StatusChip from './shared/StatusChip';
+import { tableRowClick } from './shared/tableRowClick';
 import PodDetailDrawer from './pods/PodDetailDrawer';
 
-type Order = 'asc' | 'desc';
-type SortKey = 'name' | 'namespace' | 'status' | 'restarts' | 'cpuUsage' | 'memoryUsage' | 'nodeName' | 'creationTimestamp';
-
-interface HeadCell {
-  id: SortKey;
-  label: string;
-  align?: 'left' | 'right';
-  width: string;
-}
-
-const headCells: HeadCell[] = [
-  { id: 'name', label: 'Name', width: '24%' },
-  { id: 'namespace', label: 'Namespace', width: '12%' },
-  { id: 'status', label: 'Status', width: '10%' },
-  { id: 'restarts', label: 'Restarts', align: 'right', width: '8%' },
-  { id: 'cpuUsage', label: 'CPU', width: '14%' },
-  { id: 'memoryUsage', label: 'Memory', width: '14%' },
-  { id: 'nodeName', label: 'Node', width: '12%' },
-  { id: 'creationTimestamp', label: 'Age', width: '6%' },
-];
+type Row = Pod & Record<string, unknown>;
 
 interface PodsTableProps {
   pods: Pod[];
@@ -44,6 +28,17 @@ interface PodsTableProps {
   onPodDeleted?: () => void;
 }
 
+const cpuTooltip = (pod: Pod): string => {
+  const denom = pod.cpuBasis === 'limit' ? pod.cpuLimit : pod.cpuBasis === 'request' ? pod.cpuRequest : undefined;
+  if (pod.cpuPercent == null) return `CPU ${pod.cpuUsage}`;
+  return `${pod.cpuUsage} of ${denom || 'node allocatable'} ${basisLabel(pod.cpuBasis)} (${pod.cpuPercent}%)`;
+};
+const memTooltip = (pod: Pod): string => {
+  const denom = pod.memoryBasis === 'limit' ? pod.memoryLimit : pod.memoryBasis === 'request' ? pod.memoryRequest : undefined;
+  if (pod.memoryPercent == null) return `Memory ${pod.memoryUsage}`;
+  return `${pod.memoryUsage} of ${denom || 'node allocatable'} ${basisLabel(pod.memoryBasis)} (${pod.memoryPercent}%)`;
+};
+
 export default function PodsTable({
   pods,
   cluster,
@@ -53,16 +48,10 @@ export default function PodsTable({
   nodeNames,
   onPodDeleted,
 }: PodsTableProps) {
-  const [order, setOrder] = useState<Order>('asc');
-  const [orderBy, setOrderBy] = useState<SortKey>('name');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPod, setSelectedPod] = useState<Pod | null>(null);
-
-  const handleRequestSort = (property: SortKey) => {
-    const isAsc = orderBy === property && order === 'asc';
-    setOrder(isAsc ? 'desc' : 'asc');
-    setOrderBy(property);
-  };
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFindShortcut(searchRef);
 
   // Server already scoped the pods; only search filters client-side.
   const filteredPods = pods.filter((pod) => {
@@ -75,195 +64,132 @@ export default function PodsTable({
       (pod.helmChart && pod.helmChart.toLowerCase().includes(q)) ||
       pod.nodeName.toLowerCase().includes(q)
     );
+  }) as Row[];
+
+  const { sortedData, sortConfig } = useTableSortableState<Row>({
+    data: filteredPods,
+    defaultSort: [{ sortKey: 'name', direction: 'ascending' }],
+    comparators: {
+      restarts: (a, b) => (a.restarts || 0) - (b.restarts || 0),
+      cpuUsage: (a, b) => parseNumericValue(a.cpuUsage) - parseNumericValue(b.cpuUsage),
+      memoryUsage: (a, b) => parseNumericValue(a.memoryUsage) - parseNumericValue(b.memoryUsage),
+      creationTimestamp: (a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''),
+    },
   });
+  const sortable = useTableSortable<Row>(sortConfig);
 
-  const cmp = (a: number | string, b: number | string) =>
-    order === 'desc' ? (b < a ? -1 : b > a ? 1 : 0) : a < b ? -1 : a > b ? 1 : 0;
-
-  const sortedPods = [...filteredPods].sort((a, b) => {
-    switch (orderBy) {
-      case 'restarts':
-        return cmp(a.restarts || 0, b.restarts || 0);
-      case 'cpuUsage':
-        return cmp(parseNumericValue(a.cpuUsage), parseNumericValue(b.cpuUsage));
-      case 'memoryUsage':
-        return cmp(parseNumericValue(a.memoryUsage), parseNumericValue(b.memoryUsage));
-      case 'creationTimestamp':
-        return cmp(a.createdAt || '', b.createdAt || '');
-      default:
-        return cmp(
-          String(a[orderBy] ?? '').toLowerCase(),
-          String(b[orderBy] ?? '').toLowerCase()
-        );
-    }
-  });
-
-  const cpuTooltip = (pod: Pod): string => {
-    const denom = pod.cpuBasis === 'limit' ? pod.cpuLimit : pod.cpuBasis === 'request' ? pod.cpuRequest : undefined;
-    if (pod.cpuPercent == null) return `CPU ${pod.cpuUsage}`;
-    return `${pod.cpuUsage} of ${denom || 'node allocatable'} ${basisLabel(pod.cpuBasis)} (${pod.cpuPercent}%)`;
-  };
-  const memTooltip = (pod: Pod): string => {
-    const denom = pod.memoryBasis === 'limit' ? pod.memoryLimit : pod.memoryBasis === 'request' ? pod.memoryRequest : undefined;
-    if (pod.memoryPercent == null) return `Memory ${pod.memoryUsage}`;
-    return `${pod.memoryUsage} of ${denom || 'node allocatable'} ${basisLabel(pod.memoryBasis)} (${pod.memoryPercent}%)`;
-  };
-
-  const selectSx = {
-    '& .MuiInputBase-root': { height: '32px', fontSize: '0.8rem' },
-  };
-  const cellSx = { py: 0.5, px: 1, fontSize: '0.75rem' };
+  const emptyMessage = [
+    'No pods found',
+    searchQuery && ` matching "${searchQuery}"`,
+    scope.type === 'namespace' && ` in namespace "${scope.value}"`,
+    scope.type === 'node' && ` on node "${scope.value}"`,
+    scope.type === 'nodeGroup' && ` in node group "${scope.value}"`,
+  ].filter(Boolean).join('');
 
   return (
     <>
-      <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextField
-          variant="outlined"
-          size="small"
-          placeholder="Search pods..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          sx={{ flex: 1, minWidth: 180, '& .MuiInputBase-root': { height: '32px' } }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-            style: { fontSize: '0.8rem' },
-          }}
-        />
+      <HStack gap={2} wrap="wrap" paddingBlock={2}>
+        <StackItem size="fill">
+          <TextInput
+            label="Search pods"
+            isLabelHidden
+            size="sm"
+            placeholder="Search pods..."
+            startIcon="search"
+            ref={searchRef}
+            value={searchQuery}
+            onChange={(value) => setSearchQuery(value)}
+          />
+        </StackItem>
         {/* Scope control: a dropdown to change the value within the current
             scope type (namespace/node), plus a chip label. Deleting returns to
             the picker to pick a different scope type. */}
         {scope.type === 'nodeGroup' ? (
-          <Chip
+          <Token
             label={`Node group: ${scope.value}`}
-            onDelete={() => onScopeChange(null)}
-            size="small"
-            color="primary"
-            variant="outlined"
+            size="sm"
+            onRemove={() => onScopeChange(null)}
           />
         ) : (
           <>
-            <FormControl size="small" sx={{ minWidth: 200, ...selectSx }}>
-              <InputLabel sx={{ fontSize: '0.8rem' }}>
-                {scope.type === 'namespace' ? 'Namespace' : 'Node'}
-              </InputLabel>
-              <Select
-                value={scope.value}
-                label={scope.type === 'namespace' ? 'Namespace' : 'Node'}
-                onChange={(e) => onScopeChange({ type: scope.type, value: e.target.value })}
-              >
-                {(scope.type === 'namespace' ? namespaces : nodeNames).map((v) => (
-                  <MenuItem key={v} value={v} sx={{ fontSize: '0.8rem' }}>{v}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Tooltip title="Change scope" arrow>
-              <Button size="small" onClick={() => onScopeChange(null)} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
-                Change
-              </Button>
-            </Tooltip>
+            <Selector
+              label={scope.type === 'namespace' ? 'Namespace' : 'Node'}
+              isLabelHidden
+              size="sm"
+              hasSearch
+              options={scope.type === 'namespace' ? namespaces : nodeNames}
+              value={scope.value}
+              onChange={(value) => value && onScopeChange({ type: scope.type, value })}
+            />
+            <Button
+              label="Change"
+              variant="ghost"
+              size="sm"
+              tooltip="Change scope"
+              onClick={() => onScopeChange(null)}
+            />
           </>
         )}
-      </Box>
+      </HStack>
 
-      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 250px)' }}>
-        <Table stickyHeader size="small" aria-label="pods table" sx={{ tableLayout: 'fixed' }}>
-          <TableHead>
-            <TableRow>
-              {headCells.map((headCell) => (
-                <TableCell
-                  align={headCell.align || 'left'}
-                  key={headCell.id}
-                  sortDirection={orderBy === headCell.id ? order : false}
-                  sx={{
-                    backgroundColor: 'action.hover',
-                    py: 0.75, px: 1, fontSize: '0.75rem', fontWeight: 600,
-                    width: headCell.width, maxWidth: headCell.width,
-                  }}
-                >
-                  <TableSortLabel
-                    active={orderBy === headCell.id}
-                    direction={orderBy === headCell.id ? order : 'asc'}
-                    onClick={() => handleRequestSort(headCell.id)}
+      {sortedData.length === 0 ? (
+        <Text type="supporting" color="secondary">{emptyMessage}</Text>
+      ) : (
+        <div className="kp-table-scroll">
+          <Table<Row>
+            data={sortedData}
+            idKey={(pod) => `${pod.namespace}-${pod.name}`}
+            density="compact"
+            hasHover
+            textOverflow="truncate"
+            plugins={{ sortable, rowClick: tableRowClick<Row>((pod) => setSelectedPod(pod)) }}
+            columns={[
+              { key: 'name', header: 'Name', width: proportional(2.5), sortable: true },
+              {
+                key: 'namespace', header: 'Namespace', width: proportional(1), sortable: true,
+                renderCell: (pod) => <Token label={pod.namespace} size="sm" />,
+              },
+              {
+                key: 'status', header: 'Status', width: proportional(1), sortable: true,
+                renderCell: (pod) => <StatusChip status={pod.status} />,
+              },
+              {
+                key: 'restarts', header: 'Restarts', width: pixel(80), align: 'end', sortable: true,
+                renderCell: (pod) => (
+                  <span
+                    title="Restarts across containers"
+                    style={{
+                      fontWeight: (pod.restarts || 0) > 0 ? 600 : undefined,
+                      color:
+                        (pod.restarts || 0) > 10
+                          ? 'var(--color-error)'
+                          : (pod.restarts || 0) > 0
+                            ? 'var(--color-warning)'
+                            : undefined,
+                    }}
                   >
-                    {headCell.label}
-                  </TableSortLabel>
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sortedPods.map((pod) => (
-              <TableRow
-                key={`${pod.namespace}-${pod.name}`}
-                hover
-                onClick={() => setSelectedPod(pod)}
-                sx={{ cursor: 'pointer' }}
-              >
-                <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pod.name}>
-                  {pod.name}
-                </TableCell>
-                <TableCell sx={cellSx}>
-                  <Chip label={pod.namespace} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
-                </TableCell>
-                <TableCell sx={cellSx}>
-                  <StatusChip status={pod.status} />
-                </TableCell>
-                <TableCell align="right" sx={cellSx}>
-                  <Tooltip title="Restarts across containers" arrow>
-                    <Box
-                      component="span"
-                      sx={{
-                        fontWeight: (pod.restarts || 0) > 0 ? 600 : 400,
-                        color:
-                          (pod.restarts || 0) > 10 ? 'error.main' : (pod.restarts || 0) > 0 ? 'warning.main' : 'text.primary',
-                      }}
-                    >
-                      {pod.restarts ?? 0}
-                    </Box>
-                  </Tooltip>
-                </TableCell>
-                <TableCell sx={cellSx}>
-                  <UsageBar
-                    percent={pod.cpuPercent}
-                    caption={pod.cpuUsage}
-                    tooltip={cpuTooltip(pod)}
-                    fallbackText={pod.cpuUsage}
-                    height={4}
-                  />
-                </TableCell>
-                <TableCell sx={cellSx}>
-                  <UsageBar
-                    percent={pod.memoryPercent}
-                    caption={pod.memoryUsage}
-                    tooltip={memTooltip(pod)}
-                    fallbackText={pod.memoryUsage}
-                    height={4}
-                  />
-                </TableCell>
-                <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pod.nodeName}>
-                  {pod.nodeName}
-                </TableCell>
-                <TableCell sx={cellSx}>{pod.creationTimestamp}</TableCell>
-              </TableRow>
-            ))}
-            {sortedPods.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={headCells.length} align="center" sx={{ py: 2, color: 'text.secondary' }}>
-                  No pods found
-                  {searchQuery && ` matching "${searchQuery}"`}
-                  {scope.type === 'namespace' && ` in namespace "${scope.value}"`}
-                  {scope.type === 'node' && ` on node "${scope.value}"`}
-                  {scope.type === 'nodeGroup' && ` in node group "${scope.value}"`}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                    {pod.restarts ?? 0}
+                  </span>
+                ),
+              },
+              {
+                key: 'cpuUsage', header: 'CPU', width: proportional(1.5), sortable: true,
+                renderCell: (pod) => (
+                  <UsageBar percent={pod.cpuPercent} caption={pod.cpuUsage} tooltip={cpuTooltip(pod)} fallbackText={pod.cpuUsage} />
+                ),
+              },
+              {
+                key: 'memoryUsage', header: 'Memory', width: proportional(1.5), sortable: true,
+                renderCell: (pod) => (
+                  <UsageBar percent={pod.memoryPercent} caption={pod.memoryUsage} tooltip={memTooltip(pod)} fallbackText={pod.memoryUsage} />
+                ),
+              },
+              { key: 'nodeName', header: 'Node', width: proportional(1.5), sortable: true },
+              { key: 'creationTimestamp', header: 'Age', width: pixel(70), sortable: true },
+            ]}
+          />
+        </div>
+      )}
 
       <PodDetailDrawer
         pod={selectedPod}
