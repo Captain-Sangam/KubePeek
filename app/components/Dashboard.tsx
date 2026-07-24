@@ -65,8 +65,12 @@ export default function Dashboard() {
         }
         const data = await res.json();
 
+        if (!Array.isArray(data)) {
+          throw new Error(`Invalid response data format: expected array, got ${typeof data}`);
+        }
+
         const displayNames = getClusterDisplayNames();
-        const clustersWithDisplayNames = (data.clusters || []).map((c: Cluster) => ({
+        const clustersWithDisplayNames = data.map((c: Cluster) => ({
           ...c,
           displayName:
             displayNames[c.name] || (c.name === DEFAULT_CONTEXT_NAME ? 'Default Cluster' : undefined),

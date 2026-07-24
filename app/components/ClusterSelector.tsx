@@ -4,16 +4,12 @@ import { useState } from 'react';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
 import { Text } from '@astryxdesign/core/Text';
 import { Spinner } from '@astryxdesign/core/Spinner';
-import { Popover } from '@astryxdesign/core/Popover';
-import { Item } from '@astryxdesign/core/Item';
+import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
 import { Icon } from '@astryxdesign/core/Icon';
-import { IconButton } from '@astryxdesign/core/IconButton';
-import { Avatar } from '@astryxdesign/core/Avatar';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Button } from '@astryxdesign/core/Button';
-import { Tooltip } from '@astryxdesign/core/Tooltip';
-import { Cloud, Pencil } from 'lucide-react';
+import { Cloud } from 'lucide-react';
 import { Cluster } from '../types/kubernetes';
 import { saveClusterDisplayName } from '../lib/kubernetes-client';
 
@@ -43,7 +39,6 @@ export default function ClusterSelector({
   loading,
   collapsed = false,
 }: ClusterSelectorProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -52,7 +47,6 @@ export default function ClusterSelector({
     setEditingCluster(cluster);
     setDisplayName(cluster.displayName || '');
     setDialogOpen(true);
-    setMenuOpen(false);
   };
 
   const handleSave = async () => {
@@ -103,37 +97,17 @@ export default function ClusterSelector({
     );
   }
 
-  const menuContent = (
-    <VStack gap={0.5} width={320}>
-      {clusters.map((cluster) => (
-        <Item
-          key={cluster.name}
-          label={clusterLabel(cluster)}
-          description={cluster.server}
-          density="compact"
-          isSelected={selectedCluster?.name === cluster.name}
-          onClick={() => {
-            onSelectCluster(cluster);
-            setMenuOpen(false);
-          }}
-          startContent={<Icon icon={Cloud} size="sm" color="secondary" />}
-          endContent={
-            <IconButton
-              label="Rename"
-              tooltip="Rename"
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEditClick(cluster);
-              }}
-              icon={<Icon icon={Pencil} size="xsm" />}
-            />
-          }
-        />
-      ))}
-    </VStack>
-  );
+  const items = [
+    ...clusters.map((cluster) => ({
+      label: clusterLabel(cluster),
+      icon: selectedCluster?.name === cluster.name ? <Icon icon="check" size="sm" /> : undefined,
+      onClick: () => onSelectCluster(cluster),
+    })),
+    { type: 'divider' as const },
+    ...(selectedCluster
+      ? [{ label: `Rename "${clusterLabel(selectedCluster)}"…`, onClick: () => handleEditClick(selectedCluster) }]
+      : []),
+  ];
 
   const dialog = (
     <Dialog isOpen={dialogOpen} onOpenChange={setDialogOpen} width={400} purpose="form">
@@ -160,47 +134,30 @@ export default function ClusterSelector({
     </Dialog>
   );
 
-  // Collapsed: a single avatar that opens the cluster menu.
-  if (collapsed) {
-    const tooltipText = selectedCluster
-      ? `${clusterLabel(selectedCluster)}${selectedCluster.server ? ` — ${selectedCluster.server}` : ''}`
-      : 'Select cluster';
-    return (
-      <>
-        <HStack hAlign="center">
-          <Popover content={menuContent} isOpen={menuOpen} onOpenChange={setMenuOpen} label="Select cluster">
-            <Tooltip content={tooltipText} placement="end">
-              <button
-                type="button"
-                onClick={() => setMenuOpen(true)}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                aria-label="Select cluster"
-              >
-                <Avatar name={selectedCluster ? clusterLabel(selectedCluster) : '?'} size="sm" />
-              </button>
-            </Tooltip>
-          </Popover>
-        </HStack>
-        {dialog}
-      </>
-    );
-  }
-
-  // Expanded: a compact row showing the active cluster; click to open menu.
   return (
     <>
-      <Popover content={menuContent} isOpen={menuOpen} onOpenChange={setMenuOpen} label="Select cluster">
-        <Item
-          label={selectedCluster ? clusterLabel(selectedCluster) : 'Select cluster'}
-          description={selectedCluster?.server}
-          density="compact"
-          labelLines={1}
-          descriptionLines={1}
-          onClick={() => setMenuOpen(true)}
-          startContent={<Icon icon={Cloud} size="sm" color="accent" />}
-          endContent={<Icon icon="chevronDown" size="sm" color="secondary" />}
-        />
-      </Popover>
+      <DropdownMenu
+        items={items}
+        hasChevron={!collapsed}
+        menuWidth={260}
+        button={
+          collapsed
+            ? {
+                label: selectedCluster ? clusterLabel(selectedCluster) : 'Select cluster',
+                isIconOnly: true,
+                icon: <Icon icon={Cloud} size="sm" />,
+                variant: 'ghost',
+                size: 'sm',
+              }
+            : {
+                label: selectedCluster ? clusterLabel(selectedCluster) : 'Select cluster',
+                icon: <Icon icon={Cloud} size="sm" color="accent" />,
+                variant: 'secondary',
+                size: 'sm',
+                width: '100%',
+              }
+        }
+      />
       {dialog}
     </>
   );
