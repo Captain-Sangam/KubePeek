@@ -60,6 +60,19 @@ svg,
   transition: var(--theme-transition);
 }
 
+/* Sticky headers for tables inside a .kp-table-scroll container (astryx Table
+   has no sticky-header prop). */
+.kp-table-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 250px);
+}
+.kp-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-background-surface);
+}
+
 /* Custom scrollbar for webkit browsers */
 ::-webkit-scrollbar {
   width: 8px;
