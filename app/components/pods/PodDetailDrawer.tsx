@@ -109,15 +109,15 @@ export default function PodDetailDrawer({ pod, cluster, open, onClose, onDeleted
           </Box>
 
           <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <TabPanel value={tab} index={0} sx={{ p: 2 }}>
+            <TabPanel value={tab} index={0} style={{ padding: 16 }}>
               <PanelState loading={detailQ.loading} error={detailQ.error} onRetry={detailQ.refetch}>
                 {detail && <PodOverviewTab detail={detail} />}
               </PanelState>
             </TabPanel>
-            <TabPanel value={tab} index={1} sx={{ p: 2 }}>
+            <TabPanel value={tab} index={1} style={{ padding: 16 }}>
               {tab === 1 && <PodEventsTab cluster={cluster} pod={pod} />}
             </TabPanel>
-            <TabPanel value={tab} index={2} sx={{ flex: 1, minHeight: 0, display: tab === 2 ? 'flex' : 'none', flexDirection: 'column' }}>
+            <TabPanel value={tab} index={2} style={{ flex: 1, minHeight: 0, display: tab === 2 ? 'flex' : 'none', flexDirection: 'column' }}>
               {tab === 2 && (
                 <PodLogsTab
                   key={`${pod.namespace}/${pod.name}`}

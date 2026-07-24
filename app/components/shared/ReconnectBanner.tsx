@@ -1,6 +1,7 @@
 'use client';
 
-import { Alert, Button } from '@mui/material';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Button } from '@astryxdesign/core/Button';
 import { Cluster } from '../../types/kubernetes';
 
 interface ReconnectBannerProps {
@@ -14,17 +15,17 @@ interface ReconnectBannerProps {
 // `aws eks get-token`).
 export default function ReconnectBanner({ cluster, onReconnect }: ReconnectBannerProps) {
   return (
-    <Alert
-      severity="warning"
-      sx={{ mb: 1.5, fontSize: '0.8rem', borderRadius: '8px' }}
-      action={
-        <Button color="inherit" size="small" onClick={onReconnect}>
-          Reconnect
-        </Button>
-      }
-    >
-      Authentication to <strong>{cluster.displayName || cluster.name}</strong> expired. Refresh your
-      AWS SSO/VPN session, then click Reconnect.
-    </Alert>
+    <div style={{ marginBottom: 'var(--spacing-3)' }}>
+      <Banner
+        status="warning"
+        title={
+          <>
+            Authentication to <strong>{cluster.displayName || cluster.name}</strong> expired. Refresh
+            your AWS SSO/VPN session, then click Reconnect.
+          </>
+        }
+        endContent={<Button label="Reconnect" size="sm" onClick={onReconnect} />}
+      />
+    </div>
   );
 }
