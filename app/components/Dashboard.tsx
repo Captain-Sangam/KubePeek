@@ -131,7 +131,7 @@ export default function Dashboard() {
         <StackItem size="fill">
           <div style={{ minWidth: 0, height: '100%' }}>
             <Card height="100%" padding={4}>
-              <div style={{ height: '100%', overflow: 'auto' }}>
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {selectedCluster ? (
                   <ClusterDetails
                     cluster={selectedCluster}

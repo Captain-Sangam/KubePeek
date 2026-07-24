@@ -298,7 +298,7 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
   };
 
   return (
-    <div style={{ height: '100%' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {authExpired && <ReconnectBanner cluster={cluster} onReconnect={handleReconnect} />}
 
       {openTabs.length > 0 && (
@@ -327,9 +327,16 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
         </TabList>
       )}
 
-      <div style={{ paddingTop: 'var(--spacing-2)' }}>
+      <div style={{ paddingTop: 'var(--spacing-2)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {openTabs.map((view) => (
-          <div key={view} style={{ display: view === activeTab ? 'block' : 'none' }}>
+          <div
+            key={view}
+            style={
+              view === activeTab
+                ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }
+                : { display: 'none' }
+            }
+          >
             {renderView(view)}
           </div>
         ))}
