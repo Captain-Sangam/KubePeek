@@ -14,6 +14,7 @@
 - The frameless app window is **draggable via the top header**; the app now opens on the Pods view.
 
 ### Fixed (this round)
+- Packaged macOS app showed a Dock icon but never opened a window. Next resolves the output-file trace root by walking up for a `package.json`/lockfile, so a parent directory holding one (e.g. `~/code`) pushed the standalone bundle to `.next/standalone/<repo>/server.js`. `electron/main.js` forks `Resources/server/server.js`, so the fork died, `waitForServer` polled a dead port for 30s, and the app quit — with the window still hidden pending `ready-to-show`. `outputFileTracingRoot` is now pinned to the repo. `make dev` was unaffected because dev skips the fork.
 - macOS app: closing the window left the app running with its server killed, so reopening from the Dock hung on a white window until force quit. Closing the window now quits the app. Related: the bundled server ran as a child that registered its own "exec" Dock icon and survived force quit as an orphan — it now runs as an Electron utility process (no Dock icon, dies with the app).
 - Pod logs could show a previously viewed pod's logs: the logs tab was reused across pod switches with no stale-response guard. Each pod now gets its own tab instance (`key` per pod), which also resets container/tail selections.
 
