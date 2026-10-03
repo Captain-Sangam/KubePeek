@@ -2,17 +2,17 @@
 
 import { useState } from 'react';
 import { Table, TableHeader, TableBody, TableRow, TableHeaderCell } from '@astryxdesign/core/Table';
-import { HStack } from '@astryxdesign/core/Stack';
+import { HStack, VStack } from '@astryxdesign/core/Stack';
 import { Icon } from '@astryxdesign/core/Icon';
-import { Node, NodeGroupInfo } from '../types/kubernetes';
-import { parseNumericValue } from '../lib/format';
-import NodeRow, { nodeColumnWidths } from './nodes/NodeRow';
-import NodeGroupRow from './nodes/NodeGroupRow';
+import { Node, NodeGroupInfo } from '../../types/kubernetes';
+import { parseNumericValue } from '../../lib/format';
+import NodeRow, { nodeColumnWidths } from './NodeRow';
+import NodeGroupRow from './NodeGroupRow';
 
 type Order = 'asc' | 'desc';
 
 interface HeadCell {
-  id: keyof Node | 'utilization' | 'started';
+  id: keyof Node | 'cpu' | 'memory' | 'utilization' | 'started';
   label: string;
   sortable: boolean;
   align?: 'left' | 'right';
@@ -24,8 +24,9 @@ interface HeadCell {
 const headCells: HeadCell[] = [
   { id: 'name', label: 'Name', sortable: true, width: nodeColumnWidths.name },
   { id: 'instanceType', label: 'Instance Type', sortable: true, width: nodeColumnWidths.instanceType },
-  { id: 'capacity', label: 'CPU', sortable: true, align: 'right', width: nodeColumnWidths.cpu },
-  { id: 'capacity', label: 'Memory', sortable: true, align: 'right', width: nodeColumnWidths.memory },
+  { id: 'capacityType', label: 'Capacity', sortable: true, width: nodeColumnWidths.capacityType },
+  { id: 'cpu', label: 'CPU', sortable: true, align: 'right', width: nodeColumnWidths.cpu },
+  { id: 'memory', label: 'Memory', sortable: true, align: 'right', width: nodeColumnWidths.memory },
   { id: 'utilization', label: 'CPU Util.', sortable: false, width: nodeColumnWidths.cpuUtil },
   { id: 'utilization', label: 'Memory Util.', sortable: false, width: nodeColumnWidths.memUtil },
   { id: 'pods', label: 'Pods', sortable: true, align: 'right', width: nodeColumnWidths.pods },
@@ -55,12 +56,16 @@ export default function NodesTable({ nodes, nodeGroups, viewMode, onNodeSelect, 
 
   const sortedNodes = [...nodes].sort((a, b) => {
     switch (orderBy) {
-      case 'capacity':
+      case 'cpu':
         return cmp(parseNumericValue(a.capacity.cpu), parseNumericValue(b.capacity.cpu));
+      case 'memory':
+        return cmp(parseNumericValue(a.capacity.memory), parseNumericValue(b.capacity.memory));
       case 'pods':
         return cmp(a.pods, b.pods);
       case 'started':
         return cmp(a.createdAt || '', b.createdAt || '');
+      case 'capacityType':
+        return cmp(a.capacityType, b.capacityType);
       case 'instanceType':
         return cmp((a.instanceType || '').toLowerCase(), (b.instanceType || '').toLowerCase());
       default:
@@ -70,8 +75,12 @@ export default function NodesTable({ nodes, nodeGroups, viewMode, onNodeSelect, 
 
   const sortedNodeGroups = [...nodeGroups].sort((a, b) => {
     switch (orderBy) {
-      case 'capacity':
+      case 'instanceType':
+        return cmp(a.nodes.length, b.nodes.length);
+      case 'cpu':
         return cmp(parseNumericValue(a.totalCpu), parseNumericValue(b.totalCpu));
+      case 'memory':
+        return cmp(parseNumericValue(a.totalMemory), parseNumericValue(b.totalMemory));
       case 'pods':
         return cmp(a.podsCount, b.podsCount);
       case 'started':
@@ -82,24 +91,25 @@ export default function NodesTable({ nodes, nodeGroups, viewMode, onNodeSelect, 
   });
 
   return (
-    <div className="kp-table-scroll">
+    <VStack className="kp-table-scroll">
       <Table density="compact" hasHover style={{ tableLayout: 'fixed', width: '100%' }}>
         <TableHeader>
           <TableRow isHeaderRow>
             {headCells.map((headCell, index) => {
               const label =
                 headCell.id === 'instanceType' && viewMode === 'nodeGroups' ? 'Nodes' : headCell.label;
+              const sortable = headCell.sortable && !(viewMode === 'nodeGroups' && headCell.id === 'capacityType');
               return (
                 <TableHeaderCell
                   key={`${headCell.id}-${index}`}
                   style={{
                     width: headCell.width,
                     textAlign: headCell.align || 'left',
-                    cursor: headCell.sortable ? 'pointer' : undefined,
+                    cursor: sortable ? 'pointer' : undefined,
                   }}
-                  onClick={headCell.sortable ? () => handleRequestSort(headCell.id) : undefined}
+                  onClick={sortable ? () => handleRequestSort(headCell.id) : undefined}
                 >
-                  {headCell.sortable ? (
+                  {sortable ? (
                     <HStack gap={0.5} vAlign="center" hAlign={headCell.align === 'right' ? 'end' : 'start'}>
                       <span>{label}</span>
                       {orderBy === headCell.id && (
@@ -129,6 +139,6 @@ export default function NodesTable({ nodes, nodeGroups, viewMode, onNodeSelect, 
               ))}
         </TableBody>
       </Table>
-    </div>
+    </VStack>
   );
 }

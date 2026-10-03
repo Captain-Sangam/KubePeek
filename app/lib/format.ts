@@ -8,7 +8,7 @@ export const parseNumericValue = (valueStr: string): number => {
   valueStr = String(valueStr);
 
   const directParse = parseFloat(valueStr);
-  if (!isNaN(directParse) && !/[a-zA-Z]/.test(valueStr)) {
+  if (!isNaN(directParse) && /^[+-]?[\d.]+$/.test(valueStr)) {
     return directParse;
   }
 
@@ -81,3 +81,9 @@ export const formatFullTimestamp = (iso?: string): string => {
     return iso;
   }
 };
+
+// Resource usage denominator matches the existing node capacity semantics.
+export function usagePercent(usage: string, capacity: string): number {
+  const c = parseNumericValue(capacity);
+  return c > 0 ? Math.min(parseNumericValue(usage) / c * 100, 100) : 0;
+}

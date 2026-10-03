@@ -5,7 +5,6 @@ import { Table, proportional, pixel, useTableSortable, useTableSortableState } f
 import { HStack, StackItem } from '@astryxdesign/core/Stack';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Selector } from '@astryxdesign/core/Selector';
-import { Token } from '@astryxdesign/core/Token';
 import { HelmReleaseSummary, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
 import { useFindShortcut } from '../../hooks/useFindShortcut';
@@ -113,10 +112,6 @@ export default function HelmReleasesTable({
             plugins={{ sortable, rowClick: tableRowClick<Row>((r) => setSelected(r)) }}
             columns={[
               { key: 'name', header: 'Release', width: proportional(2), sortable: true },
-              {
-                key: 'namespace', header: 'Namespace', width: proportional(1), sortable: true,
-                renderCell: (r) => <Token label={r.namespace} size="sm" />,
-              },
               {
                 key: 'chart', header: 'Chart', width: proportional(1.5), sortable: true,
                 renderCell: (r) => `${r.chart}${r.chartVersion ? `-${r.chartVersion}` : ''}`,

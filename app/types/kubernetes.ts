@@ -8,6 +8,7 @@ export interface Cluster {
 
 // Which resource view the sidebar has selected.
 export type ActiveView =
+  | 'computeMap'
   | 'nodeGroups'
   | 'nodes'
   | 'pods'
@@ -23,8 +24,13 @@ export type PodsScope =
   | { type: 'node'; value: string }
   | { type: 'nodeGroup'; value: string };
 
+export type CapacityType = 'spot' | 'on-demand' | 'unknown';
+
 export interface Node {
   name: string;
+  metricsAvailable: boolean;
+  capacityType: CapacityType;
+  capacitySource?: string;
   instanceType?: string;
   tags?: Record<string, string>;
   nodeGroup?: string;
@@ -80,8 +86,9 @@ export interface NodeGroupInfo {
   usedCpu: string;
   usedMemory: string;
   podsCount: number;
-  cpuPercentage?: number;
-  memPercentage?: number;
+  cpuPercentage?: number | null;
+  memPercentage?: number | null;
+  metricsAvailable?: boolean;
   oldestNodeCreatedAt?: string;
 }
 

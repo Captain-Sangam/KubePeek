@@ -2,8 +2,15 @@
 
 ## Unreleased
 
+### Ten-improvement plan
+- UI fixes: 100ms theme switching with reduced-motion support; single-line secret keys with hover tooltips and top-aligned values; redundant namespace columns removed (Pods retains them for node/group scopes); compact expanded node rows with bounded usage bars; Memory sorting corrected.
+- Live data: active-view polling keeps rows, scroll and filters during refresh, skips overlapping requests, pauses while hidden or authentication has expired, and reports freshness/stale failures. Node groups reuse the shared nodes response. Missing metrics show `n/a`.
+- Features: contextual draggable header, label-derived Spot/On-Demand/Unknown tokens and group counts, and a read-only Compute Map led by status-colored pod tiles, pod totals and hover/focus information. Node captions and hover details provide supporting context. Reservation billing coverage remains deferred.
+- Cleanup: shared usage/status helpers, manual secret reads use `useFetch`, unused `aws-sdk` and root debug script removed, server-only import guards, tables moved into their resource folders, Node 20 documentation, and CI typecheck plus lint.
+- Documentation: feature, architecture, security, development and Docker guides updated for the new behavior; the README showcase, light-theme map, pod-hover preview and five other feature screenshots use direct production-UI captures with fictional demo names and masked secrets. Image content and embedded metadata were checked for sensitive data.
+
 ### Changed
-- **New design system**: the entire UI moved from Material-UI (MUI v5 + Emotion) to [astryx](https://github.com/facebook/astryx) (`@astryxdesign/core`, neutral theme) — dense tables with sticky headers that fill the pane, native dropdowns/dialogs, Lucide icons. Dark/light mode behavior is unchanged. Pod/Helm detail panels are now edge-pinned dialogs; cluster rename moved into the cluster dropdown menu; the top bar is a slim drag strip with just the theme toggle.
+- **New design system**: the entire UI moved from Material-UI (MUI v5 + Emotion) to [astryx](https://github.com/facebook/astryx) (`@astryxdesign/core`, neutral theme) — dense tables with sticky headers that fill the pane, native dropdowns/dialogs, Lucide icons. Pod/Helm detail panels are now edge-pinned dialogs; cluster rename moved into the cluster dropdown menu.
 - **Framework upgrade**: Next.js 14 → 15 and React 18 → 19 (required by astryx). API route handlers now use async `params`.
 
 ### Added
@@ -14,6 +21,8 @@
 - The frameless app window is **draggable via the top header**; the app now opens on the Pods view.
 
 ### Fixed (this round)
+- Local `npm start` now copies the standalone browser and public assets before launch, so a fresh production build serves its CSS, JavaScript and icons correctly.
+- Unsupported purchasing-label values, including JavaScript object-property names, consistently display Unknown.
 - Packaged macOS app showed a Dock icon but never opened a window. Next resolves the output-file trace root by walking up for a `package.json`/lockfile, so a parent directory holding one (e.g. `~/code`) pushed the standalone bundle to `.next/standalone/<repo>/server.js`. `electron/main.js` forks `Resources/server/server.js`, so the fork died, `waitForServer` polled a dead port for 30s, and the app quit — with the window still hidden pending `ready-to-show`. `outputFileTracingRoot` is now pinned to the repo. `make dev` was unaffected because dev skips the fork.
 - macOS app: closing the window left the app running with its server killed, so reopening from the Dock hung on a white window until force quit. Closing the window now quits the app. Related: the bundled server ran as a child that registered its own "exec" Dock icon and survived force quit as an orphan — it now runs as an Electron utility process (no Dock icon, dies with the app).
 - Pod logs could show a previously viewed pod's logs: the logs tab was reused across pod switches with no stale-response guard. Each pod now gets its own tab instance (`key` per pod), which also resets container/tail selections.
@@ -21,7 +30,7 @@
 ### Added (earlier)
 - **Two-part sidebar**: a compact cluster selector on top and a Compute/Workloads navigation tree below, replacing the in-content tab bar. Collapses to an icon rail.
 - **Scoped loading** for Pods, Secrets, and Helm: these are never fetched cluster-wide. Pods require a namespace or node scope; Secrets and Helm require a namespace. Filtering moved server-side (`getPods` takes a namespace/node/node-group scope; a new `namespaces` endpoint feeds the pickers). Node/node-group click-through pre-scopes the Pods view.
-- **One-click reconnect**: expired-credential requests return `401 auth_expired` and surface a Reconnect banner (plus a header button) instead of a generic error — no app restart needed after refreshing your AWS session.
+- **One-click reconnect**: expired-credential requests return `401 auth_expired` and surface a Reconnect banner instead of a generic error — no app restart needed after refreshing your AWS session.
 - **Delete secrets** with confirmation (pod delete already existed; both now refresh their list on success).
 - Secret dialog: single **Reveal all / Hide all** toggle and a multi-column layout for secrets with many keys.
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPodDetail } from '../../../../../../../lib/kubernetes-server';
+import { getPodDetail, isAuthError } from '../../../../../../../lib/kubernetes-server';
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +23,9 @@ export async function GET(
     }
     return NextResponse.json(result, { status: 500 });
   } catch (error) {
+    if (isAuthError(error)) {
+      return NextResponse.json({ error: 'auth_expired' }, { status: 401 });
+    }
     console.error('Error in pod details API:', error);
     return NextResponse.json(
       {

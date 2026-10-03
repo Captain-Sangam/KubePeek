@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { Tab, TabList } from '@astryxdesign/core/TabList';
@@ -11,6 +11,7 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { Trash2 } from 'lucide-react';
 import { Pod, Cluster, PodDetail } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
+import { RefreshContext } from '../../lib/RefreshContext';
 import StatusChip from '../shared/StatusChip';
 import TabPanel from '../shared/TabPanel';
 import PanelState from '../shared/PanelState';
@@ -27,6 +28,7 @@ interface PodDetailDrawerProps {
 }
 
 export default function PodDetailDrawer({ pod, cluster, open, onClose, onDeleted }: PodDetailDrawerProps) {
+  const { refreshMs } = useContext(RefreshContext);
   const [tab, setTab] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -39,7 +41,7 @@ export default function PodDetailDrawer({ pod, cluster, open, onClose, onDeleted
     ? `/api/clusters/${encodeURIComponent(cluster.name)}/pods/${encodeURIComponent(pod.namespace)}/${encodeURIComponent(pod.name)}`
     : null;
 
-  const detailQ = useFetch<{ success: boolean; detail: PodDetail }>(open && base ? `${base}/details` : null);
+  const detailQ = useFetch<{ success: boolean; detail: PodDetail }>(open && base ? `${base}/details` : null, { refreshMs: open && refreshMs > 0 ? 15000 : 0 });
   const detail = detailQ.data?.detail;
 
   const handleDelete = async () => {
@@ -95,12 +97,12 @@ export default function PodDetailDrawer({ pod, cluster, open, onClose, onDeleted
             />
             <HStack gap={1} wrap="wrap" vAlign="center" paddingInline={4} paddingBlock={1} style={{ flexShrink: 0 }}>
               <Token label={pod.namespace} size="sm" />
-              <StatusChip status={pod.status} />
-              {(pod.restarts ?? 0) > 0 && (
+              <StatusChip status={detail?.phase || pod.status} />
+              {(detail?.restarts ?? pod.restarts ?? 0) > 0 && (
                 <Token
-                  label={`${pod.restarts} restarts`}
+                  label={`${detail?.restarts ?? pod.restarts} restarts`}
                   size="sm"
-                  color={(pod.restarts ?? 0) > 10 ? 'red' : 'yellow'}
+                  color={(detail?.restarts ?? pod.restarts ?? 0) > 10 ? 'red' : 'yellow'}
                 />
               )}
             </HStack>

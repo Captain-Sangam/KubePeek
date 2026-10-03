@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAuthError } from '../../../../../../lib/kubernetes-server';
 import { getHelmRelease } from '../../../../../../lib/helm-server';
 
 export async function GET(
@@ -23,6 +24,9 @@ export async function GET(
     }
     return NextResponse.json(result, { status: 500 });
   } catch (error) {
+    if (isAuthError(error)) {
+      return NextResponse.json({ error: 'auth_expired' }, { status: 401 });
+    }
     console.error('Error in helm release detail API:', error);
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : 'An error occurred' },

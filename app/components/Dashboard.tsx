@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { HStack, StackItem } from '@astryxdesign/core/Stack';
+import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { Card } from '@astryxdesign/core/Card';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Center } from '@astryxdesign/core/Center';
 import { Text } from '@astryxdesign/core/Text';
 import Sidebar from './Sidebar';
+import Header from './Header';
+import type { ViewStatus } from '../lib/RefreshContext';
 import ClusterDetails from './ClusterDetails';
 import { Cluster, ActiveView } from '../types/kubernetes';
 import {
@@ -24,6 +26,8 @@ export default function Dashboard() {
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [openTabs, setOpenTabs] = useState<ActiveView[]>(['pods']);
   const [activeTab, setActiveTab] = useState<ActiveView | null>('pods');
+
+  const [viewStatus, setViewStatus] = useState<ViewStatus>({ scope: null, lastUpdated: null, isRefreshing: false, refreshError: null });
 
   // Open-if-absent + focus; max one tab per view.
   const handleNavigate = (view: ActiveView) => {
@@ -93,69 +97,75 @@ export default function Dashboard() {
   }, []);
 
   const handleClusterSelect = (cluster: Cluster) => {
+    setViewStatus({ scope: null, lastUpdated: null, isRefreshing: false, refreshError: null });
     setSelectedCluster(cluster);
   };
 
   return (
-    <div style={{ height: '100%' }}>
-      {error && (
-        <div style={{ marginBottom: 'var(--spacing-4)' }}>
-          <Banner status="error" title={error} />
-        </div>
-      )}
+    <VStack height="100vh" style={{ overflow: 'hidden' }}>
+      <Header cluster={selectedCluster} activeView={activeTab} status={viewStatus} />
+      <VStack padding={4} style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {error && (
+          <VStack style={{ marginBottom: 'var(--spacing-4)' }}>
+            <Banner status="error" title={error} />
+          </VStack>
+        )}
 
-      <HStack gap={4} height="calc(100% - 4px)">
-        {/* Sidebar panel; width animates on collapse. */}
-        <div
-          style={{
-            width: collapsed ? 64 : 240,
-            flexShrink: 0,
-            height: '100%',
-            transition: 'width 0.2s ease',
-          }}
-        >
-          <Card height="100%" padding={collapsed ? 2 : 3}>
-            <Sidebar
-              clusters={clusters}
-              selectedCluster={selectedCluster}
-              onSelectCluster={handleClusterSelect}
-              loading={loading}
-              collapsed={collapsed}
-              onToggleCollapse={handleToggleCollapse}
-              activeView={activeTab}
-              onNavigate={handleNavigate}
-            />
-          </Card>
-        </div>
-
-        <StackItem size="fill">
-          <div style={{ minWidth: 0, height: '100%' }}>
-            <Card height="100%" padding={4}>
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                {selectedCluster ? (
-                  <ClusterDetails
-                    cluster={selectedCluster}
-                    openTabs={openTabs}
-                    activeTab={activeTab}
-                    onNavigate={handleNavigate}
-                    onCloseTab={handleCloseTab}
-                  />
-                ) : (
-                  <Center>
-                    <Text type="body" color="secondary">
-                      {loading
-                        ? 'Loading clusters...'
-                        : clusters.length === 0
-                          ? 'No clusters found'
-                          : 'Select a cluster to view details'}
-                    </Text>
-                  </Center>
-                )}
-              </div>
+        <HStack gap={4} height="100%" style={{ minHeight: 0 }}>
+          {/* Sidebar panel; width animates on collapse. */}
+          <VStack
+            style={{
+              width: collapsed ? 64 : 240,
+              flexShrink: 0,
+              height: '100%',
+              transition: 'width 0.2s ease',
+            }}
+          >
+            <Card height="100%" padding={collapsed ? 2 : 3}>
+              <Sidebar
+                clusters={clusters}
+                selectedCluster={selectedCluster}
+                onSelectCluster={handleClusterSelect}
+                loading={loading}
+                collapsed={collapsed}
+                onToggleCollapse={handleToggleCollapse}
+                activeView={activeTab}
+                onNavigate={handleNavigate}
+              />
             </Card>
-          </div>
-        </StackItem>
-      </HStack>
-    </div>
+          </VStack>
+
+          <StackItem size="fill">
+            <VStack style={{ minWidth: 0, height: '100%' }}>
+              <Card height="100%" padding={4}>
+                <VStack height="100%" style={{ overflow: 'hidden' }}>
+                  {selectedCluster ? (
+                    <ClusterDetails
+                      key={selectedCluster.name}
+                      cluster={selectedCluster}
+                      onViewStatusChange={setViewStatus}
+                      openTabs={openTabs}
+                      activeTab={activeTab}
+                      onNavigate={handleNavigate}
+                      onCloseTab={handleCloseTab}
+                    />
+                  ) : (
+                    <Center>
+                      <Text type="body" color="secondary">
+                        {loading
+                          ? 'Loading clusters...'
+                          : clusters.length === 0
+                            ? 'No clusters found'
+                            : 'Select a cluster to view details'}
+                      </Text>
+                    </Center>
+                  )}
+                </VStack>
+              </Card>
+            </VStack>
+          </StackItem>
+        </HStack>
+      </VStack>
+    </VStack>
   );
 }

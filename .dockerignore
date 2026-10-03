@@ -7,6 +7,9 @@ yarn-error.log
 # Next.js build output
 .next
 out
+dist
+.playwright-cli
+output/playwright
 
 # Environment variables
 .env
@@ -38,4 +41,4 @@ docker-compose.yml
 README.md
 LICENSE
 *.md
-!DOCKERHUB.md 
+!DOCKERHUB.md

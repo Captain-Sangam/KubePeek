@@ -8,7 +8,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { NodeGroupInfo } from '../../types/kubernetes';
-import { parseNumericValue, formatAge, formatFullTimestamp } from '../../lib/format';
+import { usagePercent, formatAge, formatFullTimestamp } from '../../lib/format';
 import UsageBar from '../shared/UsageBar';
 
 interface NodeGroupRowProps {
@@ -17,20 +17,18 @@ interface NodeGroupRowProps {
   onNodeGroupSelect: (nodeGroupName: string) => void;
 }
 
-const usagePercent = (usage: string, capacity: string): number => {
-  const u = parseNumericValue(usage);
-  const c = parseNumericValue(capacity);
-  if (c <= 0) return 0;
-  return Math.min((u / c) * 100, 100);
-};
-
 const truncate = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const;
 
 export default function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelect }: NodeGroupRowProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const cpuPct = nodeGroup.cpuPercentage ?? usagePercent(nodeGroup.usedCpu, nodeGroup.totalCpu);
-  const memPct = nodeGroup.memPercentage ?? usagePercent(nodeGroup.usedMemory, nodeGroup.totalMemory);
+  const cpuPct = nodeGroup.metricsAvailable === false ? null : (nodeGroup.cpuPercentage ?? usagePercent(nodeGroup.usedCpu, nodeGroup.totalCpu));
+  const memPct = nodeGroup.metricsAvailable === false ? null : (nodeGroup.memPercentage ?? usagePercent(nodeGroup.usedMemory, nodeGroup.totalMemory));
+
+  const purchasing = ['spot', 'on-demand', 'unknown'].map((type) => {
+    const count = nodeGroup.nodes.filter((node) => node.capacityType === type).length;
+    return count ? `${count} ${type}` : '';
+  }).filter(Boolean).join(' / ');
 
   return (
     <>
@@ -56,13 +54,14 @@ export default function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelec
         <TableCell>
           {nodeGroup.nodes.length === 1 ? '(1 node)' : `(${nodeGroup.nodes.length} nodes)`}
         </TableCell>
+        <TableCell><Text type="supporting" size="2xs" maxLines={1}>{purchasing}</Text></TableCell>
         <TableCell style={{ textAlign: 'right' }}>{nodeGroup.totalCpu}</TableCell>
         <TableCell style={{ textAlign: 'right' }}>{nodeGroup.totalMemory}</TableCell>
         <TableCell>
-          <UsageBar percent={cpuPct} caption={`${cpuPct.toFixed(0)}%`} tooltip={`CPU ${nodeGroup.usedCpu} of ${nodeGroup.totalCpu}`} />
+          <UsageBar percent={cpuPct} caption={cpuPct == null ? 'n/a' : `${cpuPct.toFixed(0)}%`} tooltip={`CPU ${nodeGroup.usedCpu} of ${nodeGroup.totalCpu}`} />
         </TableCell>
         <TableCell>
-          <UsageBar percent={memPct} caption={`${memPct.toFixed(0)}%`} tooltip={`Memory ${nodeGroup.usedMemory} of ${nodeGroup.totalMemory}`} />
+          <UsageBar percent={memPct} caption={memPct == null ? 'n/a' : `${memPct.toFixed(0)}%`} tooltip={`Memory ${nodeGroup.usedMemory} of ${nodeGroup.totalMemory}`} />
         </TableCell>
         <TableCell style={{ textAlign: 'right' }}>{nodeGroup.podsCount}</TableCell>
         <TableCell>
@@ -73,38 +72,38 @@ export default function NodeGroupRow({ nodeGroup, onNodeSelect, onNodeGroupSelec
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={8}>
+          <TableCell colSpan={9}>
             <VStack gap={1} paddingBlock={1}>
               <Text type="body" size="sm" weight="semibold">Nodes in Group</Text>
-              <Table density="compact" style={{ width: '100%' }}>
+              <Table density="compact" textOverflow="truncate" style={{ width: '100%', tableLayout: 'fixed' }}>
                 <TableHeader>
                   <TableRow isHeaderRow>
-                    <TableHeaderCell>Name</TableHeaderCell>
-                    <TableHeaderCell>Instance Type</TableHeaderCell>
-                    <TableHeaderCell style={{ minWidth: 120 }}>CPU</TableHeaderCell>
-                    <TableHeaderCell style={{ minWidth: 120 }}>Memory</TableHeaderCell>
-                    <TableHeaderCell style={{ textAlign: 'right' }}>Pods</TableHeaderCell>
-                    <TableHeaderCell>Started</TableHeaderCell>
+                    <TableHeaderCell style={{ width: '30%' }}>Name</TableHeaderCell>
+                    <TableHeaderCell style={{ width: '16%' }}>Instance Type</TableHeaderCell>
+                    <TableHeaderCell style={{ width: '20%' }}>CPU</TableHeaderCell>
+                    <TableHeaderCell style={{ width: '20%' }}>Memory</TableHeaderCell>
+                    <TableHeaderCell style={{ width: '6%', textAlign: 'right' }}>Pods</TableHeaderCell>
+                    <TableHeaderCell style={{ width: '8%' }}>Started</TableHeaderCell>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {nodeGroup.nodes.map((node) => {
-                    const nCpu = usagePercent(node.usage.cpu, node.capacity.cpu);
-                    const nMem = usagePercent(node.usage.memory, node.capacity.memory);
+                    const nCpu = node.metricsAvailable ? usagePercent(node.usage.cpu, node.capacity.cpu) : null;
+                    const nMem = node.metricsAvailable ? usagePercent(node.usage.memory, node.capacity.memory) : null;
                     return (
                       <TableRow key={node.name}>
                         <TableCell
-                          style={{ cursor: 'pointer' }}
+                          style={{ ...truncate, cursor: 'pointer' }}
                           onClick={() => onNodeSelect(node.name)}
                         >
-                          {node.name}
+                          <Text type="body" size="2xs" maxLines={1}>{node.name}</Text>
                         </TableCell>
-                        <TableCell>{node.instanceType || 'Unknown'}</TableCell>
+                        <TableCell style={truncate}><Text type="body" size="2xs" maxLines={1}>{node.instanceType || 'Unknown'}</Text></TableCell>
                         <TableCell>
-                          <UsageBar percent={nCpu} caption={`${node.usage.cpu} / ${node.capacity.cpu} cores`} />
+                          <VStack maxWidth={180}><UsageBar percent={nCpu} caption={nCpu == null ? 'n/a' : `${node.usage.cpu} / ${node.capacity.cpu} cores`} /></VStack>
                         </TableCell>
                         <TableCell>
-                          <UsageBar percent={nMem} caption={`${node.usage.memory} / ${node.capacity.memory}`} />
+                          <VStack maxWidth={180}><UsageBar percent={nMem} caption={nMem == null ? 'n/a' : `${node.usage.memory} / ${node.capacity.memory}`} /></VStack>
                         </TableCell>
                         <TableCell style={{ textAlign: 'right' }}>{node.pods}</TableCell>
                         <TableCell>
