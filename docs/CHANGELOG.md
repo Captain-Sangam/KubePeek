@@ -10,6 +10,7 @@
 - Documentation: feature, architecture, security, development and Docker guides updated for the new behavior; the README showcase, light-theme map, pod-hover preview and five other feature screenshots use direct production-UI captures with fictional demo names and masked secrets. Image content and embedded metadata were checked for sensitive data.
 
 ### Changed
+- **Branding and README**: replaced the README logo, macOS PNG/ICNS icons and browser favicon with the supplied blue mark, removed the unused favicon duplicate, and added repeatable asset conversion. The README now follows the Bonk-style centered header, highlights, source setup, documentation and contributing layout.
 - **New design system**: the entire UI moved from Material-UI (MUI v5 + Emotion) to [astryx](https://github.com/facebook/astryx) (`@astryxdesign/core`, neutral theme) — dense tables with sticky headers that fill the pane, native dropdowns/dialogs, Lucide icons. Pod/Helm detail panels are now edge-pinned dialogs; cluster rename moved into the cluster dropdown menu.
 - **Framework upgrade**: Next.js 14 → 15 and React 18 → 19 (required by astryx). API route handlers now use async `params`.
 
@@ -21,6 +22,7 @@
 - The frameless app window is **draggable via the top header**; the app now opens on the Pods view.
 
 ### Fixed (this round)
+- Native exports no longer repeat Node's `punycode` deprecation warning or warn about missing package description/author. A versioned dependency patch selects the installed npm `punycode` implementation; clean local and Docker installs apply it automatically. Packaging documentation now accurately describes the explicitly unsigned local build.
 - Local `npm start` now copies the standalone browser and public assets before launch, so a fresh production build serves its CSS, JavaScript and icons correctly.
 - Unsupported purchasing-label values, including JavaScript object-property names, consistently display Unknown.
 - Packaged macOS app showed a Dock icon but never opened a window. Next resolves the output-file trace root by walking up for a `package.json`/lockfile, so a parent directory holding one (e.g. `~/code`) pushed the standalone bundle to `.next/standalone/<repo>/server.js`. `electron/main.js` forks `Resources/server/server.js`, so the fork died, `waitForServer` polled a dead port for 30s, and the app quit — with the window still hidden pending `ready-to-show`. `outputFileTracingRoot` is now pinned to the repo. `make dev` was unaffected because dev skips the fork.
