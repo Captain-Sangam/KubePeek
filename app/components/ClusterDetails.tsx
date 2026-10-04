@@ -5,8 +5,9 @@ import { Tab, TabList } from '@astryxdesign/core/TabList';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/Stack';
-import NodesTable from './NodesTable';
-import PodsTable from './PodsTable';
+import ComputeMapView from './compute/ComputeMapView';
+import NodesTable from './nodes/NodesTable';
+import PodsTable from './pods/PodsTable';
 import SecretsTable from './secrets/SecretsTable';
 import HelmReleasesTable from './helm/HelmReleasesTable';
 import DeploymentsTable from './workloads/DeploymentsTable';
@@ -15,29 +16,22 @@ import HpaTable from './workloads/HpaTable';
 import PanelState from './shared/PanelState';
 import ScopePicker from './shared/ScopePicker';
 import ReconnectBanner from './shared/ReconnectBanner';
-import { Cluster, Node, Pod, NodeGroupInfo, ActiveView, PodsScope } from '../types/kubernetes';
+import { Cluster, Node, Pod, ActiveView, PodsScope } from '../types/kubernetes';
 import { useFetch } from '../hooks/useFetch';
-
-const TAB_LABELS: Record<ActiveView, string> = {
-  nodeGroups: 'Node Groups',
-  nodes: 'Nodes',
-  pods: 'Pods',
-  helm: 'Helm',
-  secrets: 'Secrets',
-  ingresses: 'Ingresses',
-  hpa: 'HPA',
-  deployments: 'Deployments',
-};
+import { groupNodes } from '../lib/node-groups';
+import { RefreshContext, combineFreshness, type Freshness, type ViewStatus } from '../lib/RefreshContext';
+import { VIEW_LABELS } from '../lib/views';
 
 interface ClusterDetailsProps {
   cluster: Cluster;
+  onViewStatusChange: (status: ViewStatus) => void;
   openTabs: ActiveView[];
   activeTab: ActiveView | null;
   onNavigate: (view: ActiveView) => void;
   onCloseTab: (view: ActiveView) => void;
 }
 
-export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigate, onCloseTab }: ClusterDetailsProps) {
+export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigate, onCloseTab, onViewStatusChange }: ClusterDetailsProps) {
   const [podsScope, setPodsScope] = useState<PodsScope | null>(null);
   const [helmNamespace, setHelmNamespace] = useState<string | null>(null);
   const [secretsNamespace, setSecretsNamespace] = useState<string | null>(null);
@@ -47,6 +41,16 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
   const [lastNamespace, setLastNamespace] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
+
+  const [childFreshness, setChildFreshness] = useState<Record<string, Freshness>>({});
+  const reportFreshness = useCallback((url: string, state: Freshness | null) => {
+    setChildFreshness((prev) => {
+      const next = { ...prev };
+      if (state) next[url] = state;
+      else delete next[url];
+      return next;
+    });
+  }, []);
 
   const base = `/api/clusters/${encodeURIComponent(cluster.name)}`;
 
@@ -88,12 +92,12 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTabs]);
 
-  const needsNamespaces = openTabs.some((v) => v !== 'nodes' && v !== 'nodeGroups');
-  const needsNodes = openTabs.some((v) => v === 'nodes' || v === 'nodeGroups' || v === 'pods');
+  const needsNamespaces = openTabs.some((v) => v !== 'nodes' && v !== 'nodeGroups' && v !== 'computeMap');
+  const needsNodes = openTabs.some((v) => v === 'nodes' || v === 'nodeGroups' || v === 'pods' || v === 'computeMap');
 
-  const nodesQ = useFetch<Node[]>(needsNodes ? `${base}/nodes` : null);
-  const nodeGroupsQ = useFetch<NodeGroupInfo[]>(openTabs.includes('nodeGroups') ? `${base}/nodegroups` : null);
-  const namespacesQ = useFetch<string[]>(needsNamespaces ? `${base}/namespaces` : null);
+  const nodesQ = useFetch<Node[]>(needsNodes ? `${base}/nodes` : null, { refreshMs: !authExpired ? (activeTab === 'computeMap' ? 45000 : activeTab === 'nodes' || activeTab === 'nodeGroups' ? 15000 : 0) : 0 });
+  const nodeGroups = useMemo(() => groupNodes(nodesQ.data || []), [nodesQ.data]);
+  const namespacesQ = useFetch<string[]>(needsNamespaces ? `${base}/namespaces` : null, { refreshMs: !authExpired && activeTab && !['nodes', 'nodeGroups', 'computeMap'].includes(activeTab) ? 30000 : 0 });
 
   const podsUrl = podsScope
     ? `${base}/pods?` +
@@ -105,14 +109,14 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
             : { nodeGroup: podsScope.value }
       ).toString()
     : null;
-  const podsQ = useFetch<Pod[]>(podsUrl);
+  const podsQ = useFetch<Pod[]>(podsUrl, { refreshMs: !authExpired && activeTab === 'pods' ? 15000 : 0 });
 
   // Surface auth expiry from any owned query.
   useEffect(() => {
-    if (nodesQ.authError || nodeGroupsQ.authError || namespacesQ.authError || podsQ.authError) {
+    if (nodesQ.authError || namespacesQ.authError || podsQ.authError) {
       setAuthExpired(true);
     }
-  }, [nodesQ.authError, nodeGroupsQ.authError, namespacesQ.authError, podsQ.authError]);
+  }, [nodesQ.authError, namespacesQ.authError, podsQ.authError]);
 
   const handleAuthError = useCallback(() => setAuthExpired(true), []);
 
@@ -121,7 +125,6 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
   const handleReconnect = () => {
     setAuthExpired(false);
     nodesQ.refetch();
-    nodeGroupsQ.refetch();
     namespacesQ.refetch();
     podsQ.refetch();
     setReloadNonce((n) => n + 1);
@@ -142,21 +145,32 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
     [nodesQ.data]
   );
 
+  const scope = activeTab === 'pods'
+    ? (podsScope ? `${podsScope.type === 'namespace' ? 'Namespace' : podsScope.type === 'node' ? 'Node' : 'Node group'}: ${podsScope.value}` : null)
+    : nsViews.find(([view]) => view === activeTab)?.[1] ?? null;
+  const primary = activeTab === 'nodes' || activeTab === 'nodeGroups' || activeTab === 'computeMap' ? nodesQ
+    : activeTab === 'pods' && podsScope ? podsQ : namespacesQ;
+  const { lastUpdated, isRefreshing, refreshError } = combineFreshness([primary, ...Object.values(childFreshness)]);
+  useEffect(() => {
+    onViewStatusChange({ scope, lastUpdated, isRefreshing, refreshError });
+  }, [scope, lastUpdated, isRefreshing, refreshError, onViewStatusChange]);
+
   const renderView = (view: ActiveView) => {
     switch (view) {
+      case 'computeMap':
+        return <PanelState loading={nodesQ.loading} error={nodesQ.error} onRetry={nodesQ.refetch}>
+          <ComputeMapView key={`map-${reloadNonce}`} cluster={cluster} nodes={nodesQ.data || []} />
+        </PanelState>;
       case 'nodeGroups':
         return (
           <PanelState
-            loading={nodeGroupsQ.loading || nodesQ.loading}
-            error={nodeGroupsQ.error || nodesQ.error}
-            onRetry={() => {
-              nodeGroupsQ.refetch();
-              nodesQ.refetch();
-            }}
+            loading={nodesQ.loading}
+            error={nodesQ.error}
+            onRetry={nodesQ.refetch}
           >
             <NodesTable
               nodes={nodesQ.data || []}
-              nodeGroups={nodeGroupsQ.data || []}
+              nodeGroups={nodeGroups}
               viewMode="nodeGroups"
               onNodeSelect={handleNodeSelect}
               onNodeGroupSelect={handleNodeGroupSelect}
@@ -298,7 +312,7 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <VStack style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {authExpired && <ReconnectBanner cluster={cluster} onReconnect={handleReconnect} />}
 
       {openTabs.length > 0 && (
@@ -307,12 +321,12 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
             <Tab
               key={view}
               value={view}
-              label={TAB_LABELS[view]}
+              label={VIEW_LABELS[view]}
               endContent={
                 // Plain clickable span, not IconButton — a button can't nest inside Tab's button.
                 <span
                   role="button"
-                  aria-label={`Close ${TAB_LABELS[view]}`}
+                  aria-label={`Close ${VIEW_LABELS[view]}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onCloseTab(view);
@@ -327,9 +341,9 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
         </TabList>
       )}
 
-      <div style={{ paddingTop: 'var(--spacing-2)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <VStack style={{ paddingTop: 'var(--spacing-2)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {openTabs.map((view) => (
-          <div
+          <VStack
             key={view}
             style={
               view === activeTab
@@ -337,8 +351,10 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
                 : { display: 'none' }
             }
           >
-            {renderView(view)}
-          </div>
+            <RefreshContext.Provider value={{ refreshMs: view === activeTab && !authExpired ? (view === 'computeMap' ? 45000 : 30000) : 0, report: view === activeTab ? reportFreshness : undefined, onAuthError: handleAuthError }}>
+              {renderView(view)}
+            </RefreshContext.Provider>
+          </VStack>
         ))}
         {openTabs.length === 0 && (
           <VStack align="center" paddingBlock={10}>
@@ -347,7 +363,7 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
             </Text>
           </VStack>
         )}
-      </div>
-    </div>
+      </VStack>
+    </VStack>
   );
 }

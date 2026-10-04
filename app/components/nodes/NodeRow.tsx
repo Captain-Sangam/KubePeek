@@ -10,17 +10,19 @@ import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { Node } from '../../types/kubernetes';
-import { parseNumericValue, formatAge, formatFullTimestamp } from '../../lib/format';
+import { usagePercent, formatAge, formatFullTimestamp } from '../../lib/format';
 import UsageBar from '../shared/UsageBar';
+import CapacityChip from './CapacityChip';
 
 export const nodeColumnWidths = {
-  name: '26%',
-  instanceType: '15%',
-  cpu: '8%',
-  memory: '10%',
-  cpuUtil: '13%',
-  memUtil: '13%',
-  pods: '7%',
+  name: '24%',
+  instanceType: '12%',
+  capacityType: '12%',
+  cpu: '7%',
+  memory: '9%',
+  cpuUtil: '11%',
+  memUtil: '11%',
+  pods: '6%',
   started: '8%',
 };
 
@@ -29,20 +31,13 @@ interface NodeRowProps {
   onNodeSelect: (nodeName: string) => void;
 }
 
-const usagePercent = (usage: string, capacity: string): number => {
-  const u = parseNumericValue(usage);
-  const c = parseNumericValue(capacity);
-  if (c <= 0) return 0;
-  return Math.min((u / c) * 100, 100);
-};
-
 const truncate = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const;
 
 export default function NodeRow({ node, onNodeSelect }: NodeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const cpuPct = usagePercent(node.usage.cpu, node.capacity.cpu);
-  const memPct = usagePercent(node.usage.memory, node.capacity.memory);
+  const cpuPct = node.metricsAvailable ? usagePercent(node.usage.cpu, node.capacity.cpu) : null;
+  const memPct = node.metricsAvailable ? usagePercent(node.usage.memory, node.capacity.memory) : null;
 
   return (
     <>
@@ -59,19 +54,20 @@ export default function NodeRow({ node, onNodeSelect }: NodeRowProps) {
         <TableCell style={truncate}>
           <span title={node.instanceType || 'Unknown'}>{node.instanceType || 'Unknown'}</span>
         </TableCell>
+        <TableCell><CapacityChip node={node} /></TableCell>
         <TableCell style={{ textAlign: 'right' }}>{node.capacity.cpu}</TableCell>
         <TableCell style={{ textAlign: 'right' }}>{node.capacity.memory}</TableCell>
         <TableCell>
           <UsageBar
             percent={cpuPct}
-            caption={`${cpuPct.toFixed(0)}%`}
+            caption={cpuPct == null ? 'n/a' : `${cpuPct.toFixed(0)}%`}
             tooltip={`CPU ${node.usage.cpu} of ${node.capacity.cpu}`}
           />
         </TableCell>
         <TableCell>
           <UsageBar
             percent={memPct}
-            caption={`${memPct.toFixed(0)}%`}
+            caption={memPct == null ? 'n/a' : `${memPct.toFixed(0)}%`}
             tooltip={`Memory ${node.usage.memory} of ${node.capacity.memory}`}
           />
         </TableCell>
@@ -91,7 +87,7 @@ export default function NodeRow({ node, onNodeSelect }: NodeRowProps) {
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={8}>
+          <TableCell colSpan={9}>
             <VStack gap={1} paddingBlock={1}>
               <Text type="body" size="sm" weight="semibold">Node Tags</Text>
               {node.tags && Object.entries(node.tags).length > 0 ? (

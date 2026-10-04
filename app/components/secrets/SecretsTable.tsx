@@ -6,7 +6,6 @@ import { HStack, StackItem } from '@astryxdesign/core/Stack';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Selector } from '@astryxdesign/core/Selector';
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
-import { Token } from '@astryxdesign/core/Token';
 import { Text } from '@astryxdesign/core/Text';
 import { SecretSummary, Cluster } from '../../types/kubernetes';
 import { useFetch } from '../../hooks/useFetch';
@@ -117,10 +116,6 @@ export default function SecretsTable({
             plugins={{ sortable, rowClick: tableRowClick<SecretRow>((s) => setSelected(s)) }}
             columns={[
               { key: 'name', header: 'Name', width: proportional(2), sortable: true },
-              {
-                key: 'namespace', header: 'Namespace', width: proportional(1), sortable: true,
-                renderCell: (s) => <Token label={s.namespace} size="sm" />,
-              },
               {
                 key: 'type', header: 'Type', width: proportional(1), sortable: true,
                 renderCell: (s) => <Text type="code" size="2xs">{s.type}</Text>,

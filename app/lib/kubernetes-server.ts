@@ -1,3 +1,5 @@
+import 'server-only';
+import { resolveCapacityType } from './capacity-type';
 import * as k8s from '@kubernetes/client-node';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,7 +10,6 @@ import {
   Cluster,
   Node,
   Pod,
-  NodeGroupInfo,
   PodDetail,
   ContainerDetail,
   ContainerStateInfo,
@@ -169,23 +170,6 @@ const formatMemoryForDisplay = (memStr: string): string => {
   } else {
     return `${(mem / (1024 * 1024)).toFixed(0)}Mi`;
   }
-};
-
-// Format memory for nodegroups (always in Gi)
-const formatNodeGroupMemory = (memStr: string): string => {
-  const mem = parseFloat(memStr);
-  if (isNaN(mem) || mem === 0) return '0Gi';
-  
-  // Always convert to Gi for nodegroups
-  const gigabytes = mem / (1024 * 1024 * 1024);
-  
-  // If the value is less than 1 Gi but not 0, show it with 1 decimal place
-  if (gigabytes < 1 && gigabytes > 0) {
-    return `${gigabytes.toFixed(1)}Gi`;
-  }
-  
-  // For larger values, round to the nearest integer
-  return `${Math.round(gigabytes)}Gi`;
 };
 
 // Resolve a node's node-group name from its labels, covering the common
@@ -469,7 +453,7 @@ export const getClientForCluster = (clusterName: string): {
       const response = await fetchWithoutCertValidation(targetUrl, opts);
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.statusText} (${response.status})`);
+        throw Object.assign(new Error(`API request failed: ${response.statusText} (${response.status})`), { statusCode: response.status });
       }
       return response.json();
     };
@@ -481,6 +465,7 @@ export const getClientForCluster = (clusterName: string): {
           const data = await metricsGet('/apis/metrics.k8s.io/v1beta1/nodes');
           return { body: data };
         } catch (err) {
+          if (isAuthError(err)) throw err;
           console.error('Error fetching node metrics directly:', err);
           return { body: { items: [] } };
         }
@@ -491,6 +476,7 @@ export const getClientForCluster = (clusterName: string): {
           const data = await metricsGet('/apis/metrics.k8s.io/v1beta1/pods');
           return { body: data };
         } catch (err) {
+          if (isAuthError(err)) throw err;
           console.error('Error fetching pod metrics directly:', err);
           return { body: { items: [] } };
         }
@@ -503,6 +489,7 @@ export const getClientForCluster = (clusterName: string): {
           );
           return { body: data };
         } catch (err) {
+          if (isAuthError(err)) throw err;
           console.error(`Error fetching pod metrics for namespace ${namespace}:`, err);
           return { body: { items: [] } };
         }
@@ -515,6 +502,7 @@ export const getClientForCluster = (clusterName: string): {
           );
           return { body: data };
         } catch (err) {
+          if (isAuthError(err)) throw err;
           console.error(`Error fetching metrics for pod ${namespace}/${podName}:`, err);
           return { body: null };
         }
@@ -558,6 +546,7 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
       nodeMetrics = metricsResponse.body;
       console.log(`Successfully fetched metrics for ${nodeMetrics.items.length} nodes`);
     } catch (metricsError) {
+      if (isAuthError(metricsError)) throw metricsError;
       console.error('Error fetching node metrics:', metricsError);
       console.log('Continuing without metrics data');
     }
@@ -570,6 +559,7 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
       pods = podsResponse.body.items;
       console.log(`Successfully fetched ${pods.length} pods`);
     } catch (podsError) {
+      if (isAuthError(podsError)) throw podsError;
       console.error('Error fetching pods:', podsError);
       console.log('Continuing without pods data');
     }
@@ -578,13 +568,13 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
       try {
         // Find metrics for this node
         const metrics = nodeMetrics.items.find(m => m.metadata?.name === node.metadata?.name);
+        const metricsAvailable = metrics?.usage?.cpu != null && metrics?.usage?.memory != null;
         
         // Count pods on this node
         const nodePods = pods.filter(pod => pod.spec?.nodeName === node.metadata?.name);
         
         // Parse CPU and memory capacity
         const cpuCapacity = node.status?.capacity?.['cpu'] || '0';
-        const memoryCapacity = node.status?.capacity?.['memory'] || '0';
         
         // Parse CPU and memory allocatable
         const cpuAllocatable = node.status?.allocatable?.['cpu'] || '0';
@@ -623,6 +613,8 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
         
         return {
           name: node.metadata?.name || 'unknown',
+          metricsAvailable,
+          ...resolveCapacityType(node.metadata?.labels),
           instanceType,
           tags,
           nodeGroup: resolveNodeGroupName(node.metadata?.labels),
@@ -634,12 +626,12 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
             memory: formatMemoryForDisplay(parsedMemCapacity)
           },
           allocatable: {
-            cpu: formatCpuForDisplay(cpuAllocatable),
-            memory: formatMemoryForDisplay(memoryAllocatable)
+            cpu: formatCpuForDisplay(parseCpuValue(cpuAllocatable)),
+            memory: formatMemoryForDisplay(parseMemoryValue(memoryAllocatable))
           },
           usage: {
-            cpu: formatCpuForDisplay(validatedCpuUsage),
-            memory: formatMemoryForDisplay(validatedMemUsage)
+            cpu: metricsAvailable ? formatCpuForDisplay(validatedCpuUsage) : 'n/a',
+            memory: metricsAvailable ? formatMemoryForDisplay(validatedMemUsage) : 'n/a'
           },
           pods: nodePods.length
         };
@@ -648,6 +640,8 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
         // Return a minimal node object in case of error
         return {
           name: node.metadata?.name || 'unknown',
+          metricsAvailable: false,
+          ...resolveCapacityType(node.metadata?.labels),
           instanceType: 'unknown',
           tags: {},
           nodeGroup: resolveNodeGroupName(node.metadata?.labels),
@@ -656,7 +650,7 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
             : '',
           capacity: { cpu: '0', memory: '0' },
           allocatable: { cpu: '0', memory: '0' },
-          usage: { cpu: '0', memory: '0' },
+          usage: { cpu: 'n/a', memory: 'n/a' },
           pods: 0
         };
       }
@@ -664,131 +658,6 @@ export const getNodes = async (clusterName: string): Promise<Node[]> => {
     
   } catch (error) {
     console.error('Error getting nodes:', error);
-    throw error;
-  }
-};
-
-// Group nodes by label
-export const getNodeGroups = async (clusterName: string): Promise<NodeGroupInfo[]> => {
-  try {
-    console.log("=== START NODE GROUP CALCULATION ===");
-    const nodes = await getNodes(clusterName);
-    console.log(`Retrieved ${nodes.length} nodes for nodegroup calculation`);
-    
-    // Create a map of node groups
-    const nodeGroups = new Map<string, NodeGroupInfo>();
-    
-    nodes.forEach(node => {
-      // Node group is already resolved per-node in getNodes().
-      const nodeGroupName = node.nodeGroup || 'default';
-
-      // Get or create node group
-      let nodeGroup = nodeGroups.get(nodeGroupName);
-      if (!nodeGroup) {
-        nodeGroup = {
-          name: nodeGroupName,
-          nodes: [],
-          totalCpu: '0',
-          totalMemory: '0',
-          usedCpu: '0',
-          usedMemory: '0',
-          podsCount: 0,
-          cpuPercentage: 0,
-          memPercentage: 0
-        };
-        nodeGroups.set(nodeGroupName, nodeGroup);
-      }
-
-      // Add node to group
-      nodeGroup.nodes.push(node);
-
-      // Track the oldest node in the group (earliest creation timestamp).
-      if (node.createdAt) {
-        if (!nodeGroup.oldestNodeCreatedAt || node.createdAt < nodeGroup.oldestNodeCreatedAt) {
-          nodeGroup.oldestNodeCreatedAt = node.createdAt;
-        }
-      }
-      
-      try {
-        // Get CPU capacity and usage from node data
-        const cpuCapacity = parseFloat(parseCpuValue(node.capacity.cpu));
-        const cpuUsage = parseFloat(parseCpuValue(node.usage.cpu));
-        const validatedCpuUsage = Math.min(cpuUsage, cpuCapacity);
-        
-        // Get memory values directly from the node's allocatable & capacity field
-        const memCapacityBytes = parseFloat(parseMemoryValue(node.capacity.memory));
-        
-        // Get memory usage
-        const memUsageBytes = parseFloat(parseMemoryValue(node.usage.memory));
-        const validatedMemUsage = Math.min(memUsageBytes, memCapacityBytes);
-        
-        // Add values to node group totals
-        nodeGroup.totalCpu = (parseFloat(nodeGroup.totalCpu) + cpuCapacity).toString();
-        nodeGroup.usedCpu = (parseFloat(nodeGroup.usedCpu) + validatedCpuUsage).toString();
-        nodeGroup.totalMemory = (parseFloat(nodeGroup.totalMemory) + memCapacityBytes).toString();
-        nodeGroup.usedMemory = (parseFloat(nodeGroup.usedMemory) + validatedMemUsage).toString();
-        
-      } catch (error) {
-        console.error(`Error calculating node metrics for ${node.name}:`, error);
-      }
-      
-      nodeGroup.podsCount += node.pods;
-    });
-    
-    // Convert map to array and format values
-    const formattedNodeGroups = Array.from(nodeGroups.values()).map(nodeGroup => {
-      try {
-        // Get raw values for calculations
-        const totalCpu = parseFloat(nodeGroup.totalCpu);
-        const usedCpu = parseFloat(nodeGroup.usedCpu);
-        const totalMemory = parseFloat(nodeGroup.totalMemory);
-        const usedMemory = parseFloat(nodeGroup.usedMemory);
-        
-        // Calculate percentages
-        const cpuPercentage = totalCpu > 0 ? Math.min(Math.round((usedCpu / totalCpu) * 100), 100) : 0;
-        const memPercentage = totalMemory > 0 ? Math.min(Math.round((usedMemory / totalMemory) * 100), 100) : 0;
-        
-        // Format values for display
-        const formattedTotalCpu = formatCpuForDisplay(nodeGroup.totalCpu);
-        const formattedUsedCpu = formatCpuForDisplay(nodeGroup.usedCpu);
-        
-        // Convert memory to Gi directly for display
-        const totalMemoryGi = totalMemory / (1024 * 1024 * 1024);
-        // Ensure we don't show partial gigabytes for node groups
-        const totalMemoryDisplay = `${Math.round(totalMemoryGi)}Gi`;
-        
-        // Return the formatted node group data
-        return {
-          ...nodeGroup,
-          totalCpu: formattedTotalCpu,
-          usedCpu: formattedUsedCpu,
-          totalMemory: totalMemoryDisplay,
-          usedMemory: formatNodeGroupMemory(nodeGroup.usedMemory),
-          cpuPercentage: cpuPercentage,
-          memPercentage: memPercentage
-        };
-      } catch (error) {
-        console.error(`Error formatting nodeGroup ${nodeGroup.name}:`, error);
-        
-        // Fallback to defaults if formatting fails
-        const totalMemory = parseFloat(nodeGroup.totalMemory);
-        const totalMemoryGi = Math.max(1, Math.round(totalMemory / (1024 * 1024 * 1024)));
-        
-        return {
-          ...nodeGroup,
-          totalCpu: formatCpuForDisplay(nodeGroup.totalCpu),
-          usedCpu: formatCpuForDisplay(nodeGroup.usedCpu),
-          totalMemory: `${totalMemoryGi}Gi`,
-          usedMemory: formatNodeGroupMemory(nodeGroup.usedMemory),
-          cpuPercentage: 0,
-          memPercentage: 0
-        };
-      }
-    });
-    
-    return formattedNodeGroups;
-  } catch (error) {
-    console.error('Error getting node groups:', error);
     throw error;
   }
 };
@@ -984,8 +853,8 @@ export const getPods = async (
           status: pod.status?.phase || 'Unknown',
           helmChart,
           helmVersion,
-          cpuUsage: cpuUsageFormatted,
-          memoryUsage: memoryUsageFormatted,
+          cpuUsage: metrics?.containers?.length ? cpuUsageFormatted : 'n/a',
+          memoryUsage: metrics?.containers?.length ? memoryUsageFormatted : 'n/a',
           nodeName: pod.spec?.nodeName || 'unknown',
           nodeGroup: nodeInfo?.nodeGroup || 'unknown',
           creationTimestamp: age,
@@ -997,8 +866,8 @@ export const getPods = async (
             res.memoryRequest > 0 ? formatMemoryForDisplay(res.memoryRequest.toString()) : undefined,
           memoryLimit:
             res.memoryLimit > 0 ? formatMemoryForDisplay(res.memoryLimit.toString()) : undefined,
-          cpuPercent: cpuUsagePct.basis === 'none' ? null : cpuUsagePct.percent,
-          memoryPercent: memUsagePct.basis === 'none' ? null : memUsagePct.percent,
+          cpuPercent: !metrics?.containers?.length || cpuUsagePct.basis === 'none' ? null : cpuUsagePct.percent,
+          memoryPercent: !metrics?.containers?.length || memUsagePct.basis === 'none' ? null : memUsagePct.percent,
           cpuBasis: cpuUsagePct.basis,
           memoryBasis: memUsagePct.basis
         };
@@ -1009,8 +878,8 @@ export const getPods = async (
           name: pod.metadata?.name || 'unknown',
           namespace: pod.metadata?.namespace || 'default',
           status: pod.status?.phase || 'Unknown',
-          cpuUsage: '0m',
-          memoryUsage: '0Mi',
+          cpuUsage: 'n/a',
+          memoryUsage: 'n/a',
           nodeName: pod.spec?.nodeName || 'unknown',
           nodeGroup: 'unknown',
           creationTimestamp: 'unknown',
@@ -1130,6 +999,7 @@ export const getPodLogs = async (
           );
           allLogs += `\n--- Container: ${container} ---\n${body}\n`;
         } catch (containerError) {
+          if (isAuthError(containerError)) throw containerError;
           console.error(`Error fetching logs for container ${container}:`, containerError);
           allLogs += `\n--- Container: ${container} ---\nError fetching logs: ${
             containerError instanceof Error ? containerError.message : 'Unknown error'
@@ -1157,6 +1027,7 @@ export const getPodLogs = async (
 
     return { success: true, logs: body };
   } catch (error) {
+    if (isAuthError(error)) throw error;
     console.error(`Error getting logs for pod ${namespace}/${podName}:`, error);
     let errorMessage = 'Unknown error occurred while fetching logs';
     
@@ -1368,10 +1239,10 @@ export const getPodDetail = async (
       restartPolicy: pod.spec?.restartPolicy,
       serviceAccountName: pod.spec?.serviceAccountName,
       restarts,
-      cpuUsage: formatCpuForDisplay(totalCpuUsage.toString()),
-      memoryUsage: formatMemoryForDisplay(totalMemUsage.toString()),
-      cpuPercent: cpuPct.basis === 'none' ? null : cpuPct.percent,
-      memoryPercent: memPct.basis === 'none' ? null : memPct.percent,
+      cpuUsage: metrics?.containers?.length ? formatCpuForDisplay(totalCpuUsage.toString()) : 'n/a',
+      memoryUsage: metrics?.containers?.length ? formatMemoryForDisplay(totalMemUsage.toString()) : 'n/a',
+      cpuPercent: !metrics?.containers?.length || cpuPct.basis === 'none' ? null : cpuPct.percent,
+      memoryPercent: !metrics?.containers?.length || memPct.basis === 'none' ? null : memPct.percent,
       cpuBasis: cpuPct.basis,
       memoryBasis: memPct.basis,
       labels: pod.metadata?.labels || {},
@@ -1404,6 +1275,7 @@ export const getPodDetail = async (
 
     return { success: true, detail };
   } catch (error) {
+    if (isAuthError(error)) throw error;
     console.error(`Error getting detail for pod ${namespace}/${podName}:`, error);
     return {
       success: false,
@@ -1454,6 +1326,7 @@ export const getPodEvents = async (
 
     return { success: true, events };
   } catch (error) {
+    if (isAuthError(error)) throw error;
     console.error(`Error getting events for pod ${namespace}/${podName}:`, error);
     return {
       success: false,
@@ -1666,6 +1539,7 @@ export const getSecretDetail = async (
       }
     };
   } catch (error) {
+    if (isAuthError(error)) throw error;
     console.error(`Error getting secret ${namespace}/${name}:`, error);
     return {
       success: false,

@@ -1,29 +1,32 @@
 # KubePeek Docker Image
 
-KubePeek is a snazzy web-based Kubernetes monitoring dashboard that connects to your local Kubernetes configuration to give you a bird's-eye view of all your connected clusters. No more squinting at terminal outputs - see your clusters in style!
+KubePeek is a local Kubernetes visibility dashboard. It reads your mounted kubeconfig and uses its existing permissions to show nodes, pods, secrets, Helm releases and workloads.
 
 ## Quick Start
 
 ```bash
-docker run -d -p 3000:3000 \
+docker run -d -p 127.0.0.1:3000:3000 \
  -v $HOME/.kube:/root/.kube \
  -v $HOME/.aws:/root/.aws \
  -e KUBECONFIG=/root/.kube/config \
  --name kubepeek ajsangamithran/kubepeek:latest
 ```
 
-Then visit http://localhost:3000 in your browser.
+Then open [localhost:3000](http://localhost:3000) in your browser.
 
-## ✨ Features
+## Features
 
-- 📁 Effortlessly reads from your local Kubernetes configuration files
-- 🔍 Displays all the juicy details about your Kubernetes clusters
-- 🖥️ Node groups with per-node CPU/RAM usage and node start times
-- 🛰️ Pods with restart counts, CPU/RAM usage bars, and filters by namespace, node group, and node
-- 🔎 Pod detail drawer: status, per-container breakdown, events, and logs with a JSON fields filter
-- 🔐 Secrets — list and reveal decoded values on demand
-- ⎈ Helm — read-only releases with values, manifest, and revision history
-- 📊 Sortable tables and drill-down from nodes to pods
+- Active-view refresh with last-updated/stale status and preserved filters, sorting and scroll
+- Nodes and node groups with CPU/RAM, start times and provider-label Spot/On-Demand/Unknown classification
+- Read-only Compute Map with prominent pod tiles and status counts; hover for pod details or supporting node information
+- Pods scoped by namespace, node group or node, with restart counts and CPU/RAM bars
+- Pod detail, per-container metrics, events and manually refreshed logs with a JSON fields filter
+- Namespace-scoped Secrets with masked values, manual reveal and an aligned key grid
+- Read-only Helm releases with values, manifest and revision history
+- Deployments, Ingresses and HPA tables
+- Tabs, contextual header, sortable tables, and fast light/dark theme switching
+
+Nodes and Pods refresh every 15 seconds, resource lists every 30 seconds, and Compute Map every 45 seconds while active. Secret values and logs are fetched manually. Missing metrics show `n/a`; reservation billing coverage is deferred. See the [feature guide](https://github.com/Captain-Sangam/KubePeek/blob/main/docs/features.md) for details.
 
 ## Environment Variables
 
@@ -39,29 +42,34 @@ Then visit http://localhost:3000 in your browser.
 ### Using a custom Kubernetes config file:
 
 ```bash
-docker run -d -p 3000:3000 -v $HOME/.kube:/root/.kube -e KUBECONFIG=/root/.kube/config ajsangamithran/kubepeek:latest
+docker run -d -p 127.0.0.1:3000:3000 \
+  -v /path/to/config:/root/.kube/config:ro \
+  -e KUBECONFIG=/root/.kube/config ajsangamithran/kubepeek:latest
 ```
 
 ### Changing the port:
 
 ```bash
-docker run -d -p 8080:3000 --network="host" -v $HOME/.kube:/home/node/.kube ajsangamithran/kubepeek:latest
+docker run -d -p 127.0.0.1:8080:3000 \
+  -v $HOME/.kube:/root/.kube \
+  -e KUBECONFIG=/root/.kube/config ajsangamithran/kubepeek:latest
 ```
 
 ## Troubleshooting
 
 - If you encounter permission issues, make sure your Kubernetes configuration is readable by the container.
 - For API access issues, ensure your kubeconfig has valid credentials.
-- If you get `ECONNREFUSED` errors connecting to 127.0.0.1:8080, make sure to use the `--network="host"` flag to allow the container to access the Kubernetes API on your host machine.
-- For locally running Kubernetes clusters (like minikube, kind, or k3s), the `--network="host"` flag is required.
+- The API server address in your kubeconfig must be reachable from inside the container. A loopback address refers to the container itself; configure a reachable address for a cluster running on the Docker host.
+- If CPU/RAM shows `n/a`, check metrics-server and Metrics API permissions.
 
 ## Technical Details
 
 - Built with Next.js and TypeScript
 - Uses the astryx design system (@astryxdesign/core) for UI components
-- Leverages the official Kubernetes JavaScript client (@kubernetes/client-node)
-- Real-time metrics using Kubernetes Metrics API
+- Uses the official Kubernetes JavaScript client (@kubernetes/client-node)
+- Periodic metrics reads through the Kubernetes Metrics API
+- Node.js 20 production standalone server; includes the AWS CLI for EKS exec-auth
 
 ## Source Code
 
-The source code for this project is available on GitHub at: https://github.com/yourusername/kubepeek 
+Source and documentation: [Captain-Sangam/KubePeek](https://github.com/Captain-Sangam/KubePeek).

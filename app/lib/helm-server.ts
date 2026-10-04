@@ -1,5 +1,6 @@
+import 'server-only';
 import { gunzipSync } from 'zlib';
-import { getClientForCluster } from './kubernetes-server';
+import { getClientForCluster, isAuthError } from './kubernetes-server';
 import { HelmReleaseSummary, HelmReleaseDetail } from '../types/kubernetes';
 
 // Shape of the decoded Helm release payload we care about.
@@ -180,6 +181,7 @@ export const getHelmRelease = async (
 
     return { success: true, release };
   } catch (error) {
+    if (isAuthError(error)) throw error;
     console.error(`Error getting helm release ${namespace}/${name}:`, error);
     return {
       success: false,

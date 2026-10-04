@@ -9,10 +9,12 @@ import { Icon } from '@astryxdesign/core/Icon';
 import { HStack, VStack, StackItem } from '@astryxdesign/core/Stack';
 import { Text } from '@astryxdesign/core/Text';
 import { Token } from '@astryxdesign/core/Token';
+import { Grid } from '@astryxdesign/core/Grid';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
 import { SecretSummary, SecretDetail, Cluster } from '../../types/kubernetes';
 import { useFindShortcut } from '../../hooks/useFindShortcut';
+import { useFetch } from '../../hooks/useFetch';
 import CopyButton from '../shared/CopyButton';
 
 interface SecretDetailDialogProps {
@@ -24,9 +26,8 @@ interface SecretDetailDialogProps {
 }
 
 export default function SecretDetailDialog({ cluster, secret, open, onClose, onDeleted }: SecretDetailDialogProps) {
-  const [detail, setDetail] = useState<SecretDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [requestedTarget, setRequestedTarget] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -34,35 +35,30 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
   const searchRef = useRef<HTMLInputElement>(null);
   useFindShortcut(searchRef);
 
+  const target = secret
+    ? `/api/clusters/${encodeURIComponent(cluster.name)}/secrets/${encodeURIComponent(secret.namespace)}/${encodeURIComponent(secret.name)}`
+    : null;
+  // Decoded values are fetched only after an explicit reveal, never polled.
+  const detailQ = useFetch<{ success: boolean; secret: SecretDetail }>(
+    open && requestedTarget === target ? target : null,
+    { refreshMs: 0, reportFreshness: false }
+  );
+  const detail = detailQ.data?.secret;
+  const error = mutationError || detailQ.error;
+
   // Reset when the dialog target changes.
   useEffect(() => {
-    setDetail(null);
+    setRequestedTarget(null);
     setRevealed(false);
-    setError(null);
+    setMutationError(null);
     setKeyQuery('');
-  }, [secret?.name, secret?.namespace]);
+  }, [target, open]);
 
-  // Fetch decoded values on first reveal (cached afterward).
-  const ensureDetail = async () => {
-    if (detail || loading || !secret) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/clusters/${encodeURIComponent(cluster.name)}/secrets/${encodeURIComponent(secret.namespace)}/${encodeURIComponent(secret.name)}`
-      );
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load secret');
-      setDetail(data.secret);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load secret');
-    } finally {
-      setLoading(false);
+  const toggleRevealAll = () => {
+    if (!revealed) {
+      setRequestedTarget(target);
+      if (detailQ.error) detailQ.refetch();
     }
-  };
-
-  const toggleRevealAll = async () => {
-    if (!revealed) await ensureDetail();
     setRevealed((prev) => !prev);
   };
 
@@ -80,7 +76,7 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
       onClose();
       onDeleted?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete secret');
+      setMutationError(err instanceof Error ? err.message : 'Failed to delete secret');
     } finally {
       setDeleting(false);
     }
@@ -120,7 +116,7 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
                   size="sm"
                   variant="ghost"
                   icon={<Icon icon={revealed ? EyeOff : Eye} size="sm" />}
-                  isLoading={loading && !detail}
+                  isLoading={detailQ.loading && !detail}
                   onClick={toggleRevealAll}
                 />
               )}
@@ -163,20 +159,14 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
           )}
           {/* Responsive grid: long-valued secrets (30+ keys) fill horizontal space
               instead of one tall list. */}
-          <div
-            style={{
-              display: 'grid',
-              gap: 'var(--spacing-3)',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            }}
-          >
+          <Grid columns={{ minWidth: 240 }} gap={3} align="start">
             {visibleKeys.map((key) => {
               const entry = detail?.data[key];
               return (
                 <VStack key={key} gap={0.5} style={{ minWidth: 0 }}>
-                  <HStack gap={0.5} vAlign="center">
-                    <StackItem size="fill">
-                      <Text type="code" size="2xs" weight="semibold" style={{ wordBreak: 'break-all' }}>
+                  <HStack gap={0.5} vAlign="center" wrap="nowrap">
+                    <StackItem size="fill" style={{ minWidth: 0 }}>
+                      <Text type="code" size="2xs" weight="semibold" maxLines={1}>
                         {key}
                       </Text>
                     </StackItem>
@@ -202,7 +192,7 @@ export default function SecretDetailDialog({ cluster, secret, open, onClose, onD
                 </VStack>
               );
             })}
-          </div>
+          </Grid>
         </VStack>
       </Dialog>
 

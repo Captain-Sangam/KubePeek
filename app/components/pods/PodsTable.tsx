@@ -8,13 +8,13 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { Token } from '@astryxdesign/core/Token';
 import { Text } from '@astryxdesign/core/Text';
 import { Button } from '@astryxdesign/core/Button';
-import { Pod, Cluster, PodsScope } from '../types/kubernetes';
-import { parseNumericValue, basisLabel } from '../lib/format';
-import { useFindShortcut } from '../hooks/useFindShortcut';
-import UsageBar from './shared/UsageBar';
-import StatusChip from './shared/StatusChip';
-import { tableRowClick } from './shared/tableRowClick';
-import PodDetailDrawer from './pods/PodDetailDrawer';
+import { Pod, Cluster, PodsScope } from '../../types/kubernetes';
+import { parseNumericValue, basisLabel } from '../../lib/format';
+import { useFindShortcut } from '../../hooks/useFindShortcut';
+import UsageBar from '../shared/UsageBar';
+import StatusChip from '../shared/StatusChip';
+import { tableRowClick } from '../shared/tableRowClick';
+import PodDetailDrawer from './PodDetailDrawer';
 
 type Row = Pod & Record<string, unknown>;
 
@@ -145,10 +145,10 @@ export default function PodsTable({
             plugins={{ sortable, rowClick: tableRowClick<Row>((pod) => setSelectedPod(pod)) }}
             columns={[
               { key: 'name', header: 'Name', width: proportional(2.5), sortable: true },
-              {
+              ...(scope.type === 'namespace' ? [] : [{
                 key: 'namespace', header: 'Namespace', width: proportional(1), sortable: true,
-                renderCell: (pod) => <Token label={pod.namespace} size="sm" />,
-              },
+                renderCell: (pod: Row) => <Token label={pod.namespace} size="sm" />,
+              }]),
               {
                 key: 'status', header: 'Status', width: proportional(1), sortable: true,
                 renderCell: (pod) => <StatusChip status={pod.status} />,

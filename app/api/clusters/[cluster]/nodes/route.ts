@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getNodes } from '../../../../lib/kubernetes-server';
+import { getNodes, isAuthError } from '../../../../lib/kubernetes-server';
 import { getDefaultContext, getDefaultContextName } from '../../../../lib/default-context';
 
 export async function GET(request: NextRequest, props: { params: Promise<{ cluster: string }> }) {
@@ -41,6 +41,9 @@ export async function GET(request: NextRequest, props: { params: Promise<{ clust
       },
     });
   } catch (error: any) {
+    if (isAuthError(error)) {
+      return NextResponse.json({ error: 'auth_expired' }, { status: 401 });
+    }
     console.error(`Error fetching nodes for cluster ${cluster}:`, error);
     const errorMessage = error.message || 'Failed to fetch nodes';
     console.error(`Returning error: ${errorMessage}`);

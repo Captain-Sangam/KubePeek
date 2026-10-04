@@ -6,7 +6,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { Divider } from '@astryxdesign/core/Divider';
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
-import { Boxes, Server, Package, Sailboat, KeyRound, Split, Gauge, Layers } from 'lucide-react';
+import { Network, Boxes, Server, Package, Sailboat, KeyRound, Split, Gauge, Layers } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ActiveView } from '../types/kubernetes';
 
@@ -20,6 +20,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Compute',
     items: [
+      { view: 'computeMap', label: 'Compute Map', icon: Network },
       { view: 'nodeGroups', label: 'Node Groups', icon: Boxes },
       { view: 'nodes', label: 'Nodes', icon: Server },
     ],

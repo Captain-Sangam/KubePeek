@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSecretDetail, deleteSecret } from '../../../../../../lib/kubernetes-server';
+import { getSecretDetail, deleteSecret, isAuthError } from '../../../../../../lib/kubernetes-server';
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +23,9 @@ export async function GET(
     }
     return NextResponse.json(result, { status: 500 });
   } catch (error) {
+    if (isAuthError(error)) {
+      return NextResponse.json({ error: 'auth_expired' }, { status: 401 });
+    }
     console.error('Error in secret detail API:', error);
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : 'An error occurred' },
@@ -48,6 +51,9 @@ export async function DELETE(
     const result = await deleteSecret(cluster, namespace, name);
     return NextResponse.json(result, { status: result.success ? 200 : 500 });
   } catch (error) {
+    if (isAuthError(error)) {
+      return NextResponse.json({ error: 'auth_expired' }, { status: 401 });
+    }
     console.error('Error in secret deletion API:', error);
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : 'An error occurred' },

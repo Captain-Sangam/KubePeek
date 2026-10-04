@@ -10,7 +10,7 @@
   --paper-background: #ffffff;
   --divider-color: rgba(0, 0, 0, 0.12);
   --icon-color: #333333;
-  --theme-transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  --theme-transition: background-color 0.1s ease, color 0.1s ease, border-color 0.1s ease;
 }
 
 html.dark-theme {
@@ -42,16 +42,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Apply theme transitions to common elements */
-button,
-a,
-div,
-span,
-p,
-h1, h2, h3, h4, h5, h6,
-th, td,
-svg {
-  transition: var(--theme-transition);
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --theme-transition: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 /* Tables fill the remaining pane height (flex chain from Dashboard down).
@@ -77,6 +74,18 @@ svg {
   top: 0;
   z-index: 1;
   background: var(--color-background-surface);
+}
+
+/* Pod tiles are the primary surface in Compute Map; node details stay in hover. */
+.kp-pod-tile {
+  border: var(--border-width) solid;
+  border-radius: var(--radius-inner);
+  cursor: default;
+}
+.kp-pod-tile:hover,
+.kp-pod-tile:focus-visible {
+  outline: var(--border-width) solid var(--color-border-emphasized);
+  outline-offset: var(--spacing-0-5);
 }
 
 /* Custom scrollbar for webkit browsers */
