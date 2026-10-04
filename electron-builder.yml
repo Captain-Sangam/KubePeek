@@ -16,8 +16,8 @@ extraResources:
     to: server/public
 mac:
   category: public.app-category.developer-tools
-  # Local, unsigned builds — no certificates required (electron-builder
-  # ad-hoc signs automatically on Apple Silicon so the app still launches).
+  # Local, unsigned builds — no certificates required. identity: null
+  # explicitly skips app signing; these builds are not notarized.
   identity: null
   icon: build/icon.icns
   target:

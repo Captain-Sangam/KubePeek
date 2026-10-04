@@ -1,63 +1,134 @@
-# KubePeek
+<p align="center">
+  <img src="assets/logo.png" width="192" alt="KubePeek logo">
+</p>
 
-<img src="assets/logo.png" alt="KubePeek Logo" width="240"/>
+<h1 align="center">KubePeek</h1>
 
-**A lightweight Kubernetes visibility app for Mac.**
+<p align="center"><strong>A lightweight, local Kubernetes dashboard for macOS and Docker.</strong></p>
 
-KubePeek reads your local kubeconfig and gives you a live view of your clusters: node groups with CPU/RAM and purchasing labels, scoped pod tables, and a read-only **Compute Map** with pod information on hover. It also includes pod detail, events and searchable logs, **Secrets** decoded on demand, and **Helm releases** read directly from release secrets — no helm binary required.
+<p align="center">
+  <a href="#build-from-source">Get started</a> ·
+  <a href="docs/features.md">Features</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="https://github.com/Captain-Sangam/KubePeek/issues">Report a bug</a>
+</p>
 
-Everything runs locally. The app talks to your clusters using your existing kubeconfig and its permissions. There is no KubePeek cloud service or telemetry.
+KubePeek turns your existing kubeconfig into a live view of your clusters. See where pods run, inspect CPU and memory usage, follow events and logs, and explore workloads, secrets and Helm releases from one interface.
 
-<img src="assets/showcase.png" alt="KubePeek Compute Map with prominent pod tiles, status counts and quiet node captions" width="100%"/>
+![KubePeek Compute Map with prominent pod tiles, status counts and supporting node captions](assets/showcase.png)
 
-Screenshots use fictional demo data, with secret values masked. See the map in [light mode](assets/compute-map-light.png) or with [pod hover details](assets/compute-map-hover.png). The native app and browser share the same interface.
+Everything runs locally, using your kubeconfig and its existing permissions. There is no KubePeek cloud service, account or telemetry. The native app and browser share the same interface.
 
-> Full documentation lives in [`docs/`](docs/) — see [features](docs/features.md), [architecture](docs/architecture.md), and [development](docs/development.md).
+Screenshots use fictional demo data with secret values masked.
+
+## Highlights
+
+- **Live cluster views** — automatic refresh with preserved filters, sorting and scroll, plus freshness and stale-data indicators.
+- **Compute Map** — status-colored pod tiles grouped by node, with pod counts and information on hover or keyboard focus. The map has no actions.
+- **Nodes and node groups** — CPU/RAM, start times, instance types and provider-label Spot, On-Demand or Unknown classification.
+- **Scoped pod inspection** — filter by namespace, node or node group; inspect container metrics, restart counts, events and searchable logs with a JSON fields filter.
+- **Secrets on demand** — namespace-scoped lists, masked values, manual reveal, searchable keys and hidden-by-default TLS secrets.
+- **Helm without a Helm binary** — read-only releases, computed values, manifests and revision history decoded from release secrets.
+- **Workload tables** — Deployments, Ingresses and HPA with readiness, addresses and autoscaler metrics.
+- **A compact workspace** — persistent tabs, namespace memory, Cmd/Ctrl+F search, fast light/dark switching and reconnect after refreshing expired credentials.
+
+Pod and secret deletion require confirmation. Reserved Instance billing coverage is not inferred from node labels. See the [feature guide](docs/features.md) for refresh intervals and full behavior.
 
 ## Requirements
 
-- **macOS 13 (Ventura)** or later (for the native app; Docker works cross-platform)
-- **Node.js 20+**
-- A kubeconfig at `~/.kube/config` (or `$KUBECONFIG`) with reachable clusters
-- For CPU/RAM metrics: [metrics-server](https://github.com/kubernetes-sigs/metrics-server) installed on the cluster
-- For EKS: the AWS CLI on your PATH (exec-auth uses `aws eks get-token`)
+- macOS 13 or newer for the native app; Docker works across platforms.
+- Node.js 20 or newer when building from source.
+- A reachable Kubernetes cluster and a kubeconfig at `~/.kube/config` or `$KUBECONFIG`.
+- [metrics-server](https://github.com/kubernetes-sigs/metrics-server) and Metrics API permissions for CPU/RAM readings. Missing metrics display `n/a`.
+- The AWS CLI on your `PATH` for EKS exec-auth, or the credential helper configured by your kubeconfig.
 
-## Install
+## Build from source
 
-```bash
+1. Clone the repository:
+
+```sh
 git clone https://github.com/Captain-Sangam/KubePeek.git
 cd KubePeek
+```
+
+2. Install dependencies:
+
+```sh
 make install
-make dev          # run in development mode (Next dev server + Electron window)
 ```
 
-To install it as a real app (launchable from Spotlight):
+3. Build and install the macOS app:
 
-```bash
-make export       # installs to /Applications, or ~/Applications if needed
+```sh
+make export
 ```
 
-Prefer a container? See [Running with Docker](docs/development.md#running-with-docker).
+Launch **KubePeek** from Spotlight or Applications. The app is installed into `/Applications`, or `~/Applications` if needed. Local builds are unsigned and not notarized; no developer certificate is required.
 
-## Features at a glance
+To build the app in `dist/` without installing it, use `npm run dist`.
 
-- **Tabbed views** — every sidebar item opens as a closable tab that keeps its own state; new tabs default to the last namespace you picked
-- **Two-part sidebar** — cluster selector on top; a Compute/Workloads nav tree below (collapses to an icon rail)
-- **Live refresh** — active views update automatically while keeping filters, sorting and scroll; the header shows freshness and stale data after a failed refresh
-- **Node groups & Nodes** — compact rows with CPU/RAM, start times and Spot/On-Demand/Unknown labels derived from provider labels; reservation billing coverage is deferred
-- **Compute Map** — prominent, status-colored pod tiles grouped by node, with pod counts and rich hover details; node capacity and CPU/RAM stay in supporting hover information, with no node or pod actions
-- **Pods** — table scoped by namespace, node or node group, with restart counts and CPU/memory usage bars (% of limits → requests → node allocatable); delete with confirmation
-- **Pod detail drawer** — status, per-container breakdown, live metrics, events, and logs
-- **Logs** — timestamped and searchable, with a JSON fields filter (select which structured fields to show) and previous-container logs for crash loops
-- **Secrets** — scoped by namespace; TLS secrets tucked behind a checkbox; decoded values revealed manually in an aligned, searchable grid with full-key hover; delete with confirmation
-- **Helm** — read-only releases (scoped by namespace) with searchable computed values, manifest, and revision history
-- **Deployments, Ingresses & HPA** — namespace-scoped tables with replica readiness, hosts/addresses, and current-vs-target autoscaler metrics
-- **Contextual header & themes** — cluster, active view, scope and freshness in the draggable native header; 100ms light/dark switching with reduced-motion support
-- **Cmd+F everywhere** — focuses the search box of whatever view, dialog, or drawer is in front
-- **One-click reconnect** — when an EKS/AWS token expires, a Reconnect button restores access without restarting
+### Development
 
-See [docs/features.md](docs/features.md) for the full list.
+```sh
+make dev            # Next.js dev server and an Electron window
+npm run dev:web     # Browser-only development at localhost:3000
+make start          # Build and run the production server at localhost:3000
+```
+
+Run one mode at a time. See the [development guide](docs/development.md) for commands, packaging and troubleshooting.
+
+## Run with Docker
+
+Build a local production image from the repository:
+
+```sh
+docker build -t kubepeek .
+docker run -d -p 127.0.0.1:3000:3000 \
+  -v "$HOME/.kube:/root/.kube" \
+  -e KUBECONFIG=/root/.kube/config \
+  --name kubepeek kubepeek
+```
+
+Open [localhost:3000](http://localhost:3000). Your cluster's API address must be reachable from inside the container. For EKS, also mount your AWS credentials as described in the [Docker guide](docs/development.md#running-with-docker). Published-image commands are in [DOCKERHUB.md](DOCKERHUB.md).
+
+## Compute Map
+
+Pods lead the overview: status-colored tiles, pod totals and information on hover or keyboard focus. Node captions provide context, with capacity and usage available in their previews. Unscheduled pods remain visible, and missing metrics show `n/a`.
+
+The map refreshes while active and pauses while the window is hidden. It provides information without node or pod actions.
+
+<details>
+<summary>Pod hover details and light theme</summary>
+
+![Pod hover preview with namespace, status, CPU, memory, restart count and assigned node](assets/compute-map-hover.png)
+
+![Compute Map in light mode](assets/compute-map-light.png)
+
+</details>
+
+## Documentation
+
+- [Features and screenshots](docs/features.md)
+- [Development and packaging](docs/development.md)
+- [Architecture](docs/architecture.md)
+- [Privacy and security](docs/SECURITY.md)
+- [Docker image](DOCKERHUB.md)
+- [Changelog](docs/CHANGELOG.md)
+
+## Contributing
+
+Contributions are welcome. Read the [contribution guide](docs/CONTRIBUTING.md) for setup, code boundaries and the recipe for adding a resource view.
+
+Before opening a pull request, run:
+
+```sh
+make typecheck
+npm run lint
+make build
+```
+
+Report bugs and propose features through [GitHub issues](https://github.com/Captain-Sangam/KubePeek/issues). Follow the [security policy](docs/SECURITY.md#reporting-a-vulnerability) for vulnerability reports.
 
 ## License
 
-MIT
+KubePeek is available under the [MIT License](LICENSE).

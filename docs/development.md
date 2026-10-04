@@ -50,16 +50,20 @@ app/
     nodes/ pods/ compute/ logs/ secrets/ helm/ workloads/
   types/kubernetes.ts     Shared TypeScript interfaces (incl. ActiveView)
 electron/main.js          Electron main process (spawns the standalone server)
-electron-builder.yml      Packaging config (ad-hoc signed, mac dir target)
+electron-builder.yml      Packaging config (unsigned local app, mac dir target)
 Dockerfile                Multi-stage production image
+patches/                  Dependency fixes applied by npm postinstall
 scripts/prepare-standalone.mjs  Copies browser assets for local npm start
+scripts/update-brand-assets.sh  Regenerates logo and icon formats
 ```
 
 **Layer boundary**: components and hooks never import `kubernetes-server.ts`/`helm-server.ts` — they talk to the API routes with `useFetch`/`fetch`. Only `app/api/**` imports the server libs. Keep it that way; the server libs pull in Node-only modules (`fs`, kubeconfig, exec-auth) that must not reach the client bundle.
 
 ## Packaging the native app
 
-`make export` runs `electron-builder --dir` and copies the resulting `KubePeek.app` into Applications. Builds are unsigned (ad-hoc signed on Apple Silicon) — no developer certificate required.
+`make export` runs `electron-builder --dir` and copies the resulting `KubePeek.app` into Applications. Builds are unsigned and not notarized — no developer certificate required. The `skipped macOS code signing` message is expected because `mac.identity` is explicitly `null`. `npm run dist` builds the same app in `dist/` without installing it into Applications.
+
+Dependency installation applies `patches/tough-cookie+2.5.0.patch` with `patch-package`. The Kubernetes client's cookie dependency otherwise imports Node's deprecated built-in `punycode` module. The patch selects the dependency's existing npm `punycode` package instead; warnings remain enabled. Docker copies the patch before `npm ci` so clean installs use the same fix. Revisit the patch when upgrading the Kubernetes client or `tough-cookie`.
 
 The Electron main process spawns the Next standalone server on a free loopback port and loads it in a `BrowserWindow`. When testing exec-auth clusters (e.g. EKS), **launch the packaged app from Finder/Spotlight** at least once — GUI launches don't inherit your shell `PATH`, and this is the path we repair at startup.
 
@@ -96,7 +100,19 @@ Start the screenshot server with an explicit `KUBECONFIG` pointing only to a syn
 
 Use a 1440 × 900 viewport (1000px high for map images and the complete secret dialog), wait for data and theme transitions to settle, and move the pointer away from controls unless the screenshot demonstrates a tooltip. Capture the app viewport without browser chrome. Keep representative long keys and a mix of capacity/status labels. Check both themes across the set, and visually inspect each capture, including hover content, before replacing the assets. Check image metadata for account names, paths, credentials or location data. Preserve `assets/logo.png` and the packaged app icon unless branding changes.
 
-The 2026-10-03 refresh recaptured all eight screenshots with fictional node, group, pod, namespace and release names. Visual and rendered-text checks found no private infrastructure identifiers or exposed values. Each screenshot PNG contains only `IHDR`, `IDAT` and `IEND` chunks, with no text, EXIF or other embedded metadata. The existing logo, packaged icons and static SVGs were also inspected: their content is branding; logo provenance contains public signing information, and icon EXIF contains color-space and image dimensions only.
+The 2026-10-03 refresh recaptured all eight screenshots with fictional node, group, pod, namespace and release names. Visual and rendered-text checks found no private infrastructure identifiers or exposed values. Each screenshot PNG contains only `IHDR`, `IDAT` and `IEND` chunks, with no text, EXIF or other embedded metadata.
+
+## Branding assets
+
+`assets/logo.png` is the canonical artwork for the README. The 2026-10-04 branding update replaced the previous eye/wordmark with the supplied blue mark, preserving its artwork and white background while stripping text and EXIF metadata. `build/icon.png` and `build/icon.icns` provide the macOS app icon; `public/favicon.ico` provides browser icons at 16, 32, 48, 64, 128 and 256 pixels. The unused `assets/favicon.ico` duplicate was removed.
+
+To regenerate all formats from the canonical logo, run this on macOS with ImageMagick installed:
+
+```sh
+bash scripts/update-brand-assets.sh
+```
+
+To replace the artwork, pass a source image path as the first argument. The script stages conversions in a temporary directory, strips metadata and uses macOS `iconutil` for the full standard/Retina icon set. Generated assets are checked in, so normal development and builds do not require ImageMagick.
 
 ## Troubleshooting
 
