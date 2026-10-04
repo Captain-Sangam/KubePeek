@@ -94,7 +94,7 @@ Notes:
 
 ## Documentation screenshots
 
-`assets/showcase.png` is the README's Compute Map overview. `assets/compute-map-light.png` shows the light theme, and `assets/compute-map-hover.png` shows pod information on hover. `assets/node-groups.png`, `assets/nodes.png`, `assets/pods.png`, `assets/secrets.png` and `assets/helm.png` illustrate the other views. These are direct captures of the production browser UI using fictional demo data; secret values stay masked.
+`assets/showcase.png` is the README's Compute Map overview. `assets/compute-map-light.png` shows the light theme, `assets/compute-map-hover.png` shows pod specifications on hover, and `assets/compute-map-search.png` shows name matches across node groups. `assets/node-groups.png`, `assets/nodes.png`, `assets/pods.png`, `assets/secrets.png` and `assets/helm.png` illustrate the other views. These are direct captures of the production browser UI using fictional demo data; secret values stay masked.
 
 Start the screenshot server with an explicit `KUBECONFIG` pointing only to a synthetic API fixture on loopback. Use obvious demo labels such as `Demo cluster`, `demo-node-01` and `demo-apps`; do not capture a live cluster or rely on the default personal kubeconfig. Keep secret values masked even when the fixture contains dummy values.
 

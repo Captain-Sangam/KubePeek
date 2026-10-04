@@ -791,6 +791,17 @@ export const getPods = async (
           0
         );
 
+        // Kubelet acknowledgement (status.startTime) is not running uptime.
+        // Use only current running states, excluding previous and init states.
+        const containerStatuses = pod.status?.containerStatuses || [];
+        const runningStarts = containerStatuses.flatMap(({ state }) => {
+          const startedAt = state?.running?.startedAt;
+          const timestamp = startedAt ? new Date(startedAt).getTime() : NaN;
+          return Number.isFinite(timestamp) ? [timestamp] : [];
+        });
+        const owner = pod.metadata?.ownerReferences?.find(ref => ref.controller)
+          || pod.metadata?.ownerReferences?.[0];
+
         // Aggregate requests/limits across containers.
         const res = sumPodResources(pod.spec?.containers);
 
@@ -859,6 +870,13 @@ export const getPods = async (
           nodeGroup: nodeInfo?.nodeGroup || 'unknown',
           creationTimestamp: age,
           createdAt: creationTime,
+          runningSince: runningStarts.length ? new Date(Math.min(...runningStarts)).toISOString() : undefined,
+          readyContainers: containerStatuses.filter(container => container.ready).length,
+          containerCount: pod.spec?.containers?.length,
+          qosClass: pod.status?.qosClass,
+          podIP: pod.status?.podIP,
+          owner: owner ? { kind: owner.kind, name: owner.name } : undefined,
+          serviceAccountName: pod.spec?.serviceAccountName,
           restarts,
           cpuRequest: res.cpuRequest > 0 ? formatCpuForDisplay(res.cpuRequest.toString()) : undefined,
           cpuLimit: res.cpuLimit > 0 ? formatCpuForDisplay(res.cpuLimit.toString()) : undefined,

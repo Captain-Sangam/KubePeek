@@ -93,14 +93,16 @@ Open [localhost:3000](http://localhost:3000). Your cluster's API address must be
 
 ## Compute Map
 
-Pods lead the overview: status-colored tiles, pod totals and information on hover or keyboard focus. Node captions provide context, with capacity and usage available in their previews. Unscheduled pods remain visible, and missing metrics show `n/a`.
+Pods lead the overview: status-colored tiles, pod totals and detailed specifications on hover or keyboard focus, including namespace, age, uptime and resource requests/limits. Search pod names to highlight every match across all nodes and namespaces. Node captions provide context, with capacity and usage available in their previews. Unscheduled pods remain visible, and missing metrics show `n/a`.
 
 The map refreshes while active and pauses while the window is hidden. It provides information without node or pod actions.
 
 <details>
 <summary>Pod hover details and light theme</summary>
 
-![Pod hover preview with namespace, status, CPU, memory, restart count and assigned node](assets/compute-map-hover.png)
+![Pod hover preview with namespace, age, uptime and pod specifications](assets/compute-map-hover.png)
+
+![Pod name search highlighting matches across node groups](assets/compute-map-search.png)
 
 ![Compute Map in light mode](assets/compute-map-light.png)
 

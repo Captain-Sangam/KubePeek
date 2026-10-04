@@ -87,6 +87,16 @@ body {
   outline: var(--border-width) solid var(--color-border-emphasized);
   outline-offset: var(--spacing-0-5);
 }
+.kp-pod-tile[data-search-match="true"] {
+  box-shadow: 0 0 0 var(--spacing-0-5) var(--color-border-emphasized);
+}
+.kp-pod-tile[data-search-match="false"] {
+  opacity: 0.35;
+}
+.kp-pod-tile[data-search-match="false"]:hover,
+.kp-pod-tile[data-search-match="false"]:focus-visible {
+  opacity: 1;
+}
 
 /* Custom scrollbar for webkit browsers */
 ::-webkit-scrollbar {
