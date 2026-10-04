@@ -90,7 +90,7 @@ Then open `http://localhost:3000`.
 Notes:
 - The container now runs a real production server (`node server.js`), not the dev server.
 - Ensure your kubeconfig is readable inside the container and its credentials work from your machine.
-- For the published-image command, see [DOCKERHUB.md](../DOCKERHUB.md).
+- For published-image commands and deployment options, see [deployment.md](deployment.md).
 
 ## Documentation screenshots
 

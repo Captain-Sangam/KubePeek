@@ -1,13 +1,37 @@
-# KubePeek Docker Image
+# Deployment
 
 KubePeek is a local Kubernetes visibility dashboard. It reads your mounted kubeconfig and uses its existing permissions to show nodes, pods, secrets, Helm releases and workloads.
 
-## Quick Start
+## macOS app
+
+After installing dependencies with `make install`, run `make export` to build and install `KubePeek.app` into `/Applications`, or `~/Applications` if needed. Launch it from Spotlight or Applications. Local builds are unsigned and not notarized.
+
+To package into `dist/` without installing, run `npm run dist`. See [development.md](development.md#packaging-the-native-app) for packaging details and GUI credential-helper checks.
+
+## Local browser server
+
+Run `make start` to build and launch the production server at [localhost:3000](http://localhost:3000). Run one development or production mode at a time.
+
+## Build a Docker image
+
+From the repository root:
+
+```sh
+docker build -t kubepeek .
+docker run -d -p 127.0.0.1:3000:3000 \
+  -v "$HOME/.kube:/root/.kube" \
+  -e KUBECONFIG=/root/.kube/config \
+  --name kubepeek kubepeek
+```
+
+For EKS, also mount your AWS credentials as shown below. The API server address in your kubeconfig must be reachable inside the container.
+
+## Published Docker image
 
 ```bash
 docker run -d -p 127.0.0.1:3000:3000 \
- -v $HOME/.kube:/root/.kube \
- -v $HOME/.aws:/root/.aws \
+ -v "$HOME/.kube:/root/.kube" \
+ -v "$HOME/.aws:/root/.aws" \
  -e KUBECONFIG=/root/.kube/config \
  --name kubepeek ajsangamithran/kubepeek:latest
 ```
@@ -26,7 +50,7 @@ Then open [localhost:3000](http://localhost:3000) in your browser.
 - Deployments, Ingresses and HPA tables
 - Tabs, contextual header, sortable tables, and fast light/dark theme switching
 
-Nodes and Pods refresh every 15 seconds, resource lists every 30 seconds, and Compute Map every 45 seconds while active. Secret values and logs are fetched manually. Missing metrics show `n/a`; reservation billing coverage is deferred. See the [feature guide](https://github.com/Captain-Sangam/KubePeek/blob/main/docs/features.md) for details.
+Nodes and Pods refresh every 15 seconds, resource lists every 30 seconds, and Compute Map every 45 seconds while active. Secret values and logs are fetched manually. Missing metrics show `n/a`; reservation billing coverage is deferred. See the [feature guide](features.md) for details.
 
 ## Environment Variables
 
@@ -51,7 +75,7 @@ docker run -d -p 127.0.0.1:3000:3000 \
 
 ```bash
 docker run -d -p 127.0.0.1:8080:3000 \
-  -v $HOME/.kube:/root/.kube \
+  -v "$HOME/.kube:/root/.kube" \
   -e KUBECONFIG=/root/.kube/config ajsangamithran/kubepeek:latest
 ```
 
