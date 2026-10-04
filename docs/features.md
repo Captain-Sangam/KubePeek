@@ -50,14 +50,17 @@ When cluster credentials expire, KubePeek shows a **Reconnect** banner and pause
 
 - A read-only cluster overview under **Compute**, available without selecting a namespace.
 - **Pods lead the view**: large status-colored tiles, a prominent total and status counts. Healthy pods use green, waiting pods yellow, failure states red, and other states gray; different glyphs also distinguish these categories.
-- Hover or keyboard-focus a pod for its full name, namespace, status, CPU/RAM, restart count and assigned node.
+- Hover or keyboard-focus a pod for its full name, namespace, age, uptime, ready/total containers, CPU/RAM usage and requests/limits, restarts, QoS, pod IP, owner, service account and assigned node. Uptime measures time since the oldest currently running regular container started; missing start times show `—`.
+- **Search pod names** across every namespace and node using a case-insensitive substring. Matching tiles have a bright outline; other pods are dimmed while all node groups remain visible. The total match count updates with live data. Cmd/Ctrl+F focuses search; clear it to restore the normal map.
 - Pods are grouped by node, with the busiest groups first. Node names are small supporting captions below the tiles; hover or focus a caption for instance type, group, purchasing label and node CPU/RAM.
-- Each group displays up to 40 pod tiles, followed by a remaining-count indicator. Unscheduled pods appear before the scheduled groups. Empty nodes are summarized rather than taking space in the main map, and pods remain visible if their node details are unavailable.
+- Each group normally displays up to 40 pod tiles, followed by a remaining-count indicator. During search, matches lead each group and **every matching pod is displayed**, including matches beyond the normal limit. Unscheduled pods appear before the scheduled groups and participate in search. Empty nodes are summarized rather than taking space in the main map, and pods remain visible if their node details are unavailable.
 - There are no node or pod actions in this view. It reads cluster-wide pods, independently of the scoped Pods table.
 
 ![Compute Map with prominent pod tiles and supporting node captions](../assets/showcase.png)
 
-![Pod hover preview showing status, namespace, CPU, RAM, restarts and assigned node](../assets/compute-map-hover.png)
+![Pod hover preview with namespace, age, uptime, container readiness and pod specifications](../assets/compute-map-hover.png)
+
+![Pod name search highlighting matches across node groups](../assets/compute-map-search.png)
 
 <details>
 <summary>Compute Map in light mode</summary>

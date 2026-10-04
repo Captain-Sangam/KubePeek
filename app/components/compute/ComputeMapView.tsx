@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import { Box, Clock3, CircleAlert, CircleHelp, Server } from 'lucide-react';
 import { Grid } from '@astryxdesign/core/Grid';
 import { HStack, VStack } from '@astryxdesign/core/Stack';
@@ -10,9 +10,13 @@ import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { HoverCard } from '@astryxdesign/core/HoverCard';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList';
+import { TextInput } from '@astryxdesign/core/TextInput';
 import { useFetch } from '../../hooks/useFetch';
+import { useFindShortcut } from '../../hooks/useFindShortcut';
 import type { Cluster, Node, Pod } from '../../types/kubernetes';
 import { statusColor, type StatusColor } from '../../lib/status';
+import { formatAge, formatFullTimestamp } from '../../lib/format';
+import { matchesPodName, selectMapPods } from '../../lib/compute-map';
 import PanelState from '../shared/PanelState';
 import StatusChip from '../shared/StatusChip';
 import CapacityChip from '../nodes/CapacityChip';
@@ -32,27 +36,35 @@ const statusLegend = [
   { color: 'gray', label: 'Other', variant: 'neutral' },
 ] as const;
 
-const PodTile = memo(function PodTile({ pod }: { pod: Pod }) {
+const PodTile = memo(function PodTile({ pod, searchMatch }: { pod: Pod; searchMatch?: boolean }) {
   const color = statusColor(pod.status);
   const [previewOpen, setPreviewOpen] = useState(false);
   return (
     <HoverCard hasHoverIndication={false} focusTrigger="always" onOpenChange={setPreviewOpen} content={previewOpen ?
-      <VStack gap={3} maxWidth="calc(var(--spacing-10) * 8)">
+      <VStack gap={3} maxWidth="calc(var(--spacing-10) * 10)" style={{ maxHeight: 'calc(100dvh - var(--spacing-10) * 2)' }} isScrollable>
         <Text type="label" style={{ overflowWrap: 'anywhere' }}>{pod.name}</Text>
-        <HStack gap={2} vAlign="center" wrap="wrap">
-          <StatusChip status={pod.status} />
-          <Text type="supporting" style={{ overflowWrap: 'anywhere' }}>{pod.namespace}</Text>
-        </HStack>
-        <MetadataList>
-          <MetadataListItem label="CPU">{pod.cpuUsage}</MetadataListItem>
-          <MetadataListItem label="RAM">{pod.memoryUsage}</MetadataListItem>
+        <HStack><StatusChip status={pod.status} /></HStack>
+        <MetadataList label={{ position: 'start', width: 'calc(var(--spacing-10) * 3)' }}>
+          <MetadataListItem label="Namespace"><Text type="body" style={{ overflowWrap: 'anywhere' }}>{pod.namespace}</Text></MetadataListItem>
+          <MetadataListItem label="Age"><Tooltip content={`Created: ${formatFullTimestamp(pod.createdAt)}`}><Text type="body">{pod.createdAt ? formatAge(pod.createdAt) : pod.creationTimestamp}</Text></Tooltip></MetadataListItem>
+          <MetadataListItem label="Uptime"><Tooltip content={pod.runningSince ? `Oldest currently running container started: ${formatFullTimestamp(pod.runningSince)}` : 'No running container start time available'}><Text type="body">{formatAge(pod.runningSince)}</Text></Tooltip></MetadataListItem>
+          <MetadataListItem label="Ready containers">{pod.containerCount !== undefined ? `${pod.readyContainers ?? 0} / ${pod.containerCount}` : '—'}</MetadataListItem>
+          <MetadataListItem label="CPU usage">{pod.cpuUsage}</MetadataListItem>
+          <MetadataListItem label="RAM usage">{pod.memoryUsage}</MetadataListItem>
+          <MetadataListItem label="CPU req / limit">{pod.cpuRequest || '—'} / {pod.cpuLimit || '—'}</MetadataListItem>
+          <MetadataListItem label="RAM req / limit">{pod.memoryRequest || '—'} / {pod.memoryLimit || '—'}</MetadataListItem>
           <MetadataListItem label="Restarts">{pod.restarts ?? '—'}</MetadataListItem>
+          <MetadataListItem label="QoS">{pod.qosClass || '—'}</MetadataListItem>
+          <MetadataListItem label="Pod IP">{pod.podIP || '—'}</MetadataListItem>
+          <MetadataListItem label="Owner"><Text type="body" style={{ overflowWrap: 'anywhere' }}>{pod.owner ? `${pod.owner.kind} / ${pod.owner.name}` : '—'}</Text></MetadataListItem>
+          <MetadataListItem label="Service account"><Text type="body" style={{ overflowWrap: 'anywhere' }}>{pod.serviceAccountName || '—'}</Text></MetadataListItem>
           <MetadataListItem label="Node"><Text type="body" style={{ overflowWrap: 'anywhere' }}>{pod.nodeName && pod.nodeName !== 'unknown' ? pod.nodeName : 'Unscheduled'}</Text></MetadataListItem>
         </MetadataList>
       </VStack> : null
     }>
       <VStack className="kp-pod-tile" role="img" tabIndex={0}
-        aria-label={`${pod.namespace}/${pod.name}: ${pod.status}`}
+        data-search-match={searchMatch}
+        aria-label={`${pod.namespace}/${pod.name}: ${pod.status}${searchMatch ? ', search match' : ''}`}
         width="100%" height="var(--spacing-10)" hAlign="center" vAlign="center" style={statusStyles[color]}>
         <Icon icon={statusGlyph[color]} size="sm" />
       </VStack>
@@ -60,14 +72,16 @@ const PodTile = memo(function PodTile({ pod }: { pod: Pod }) {
   );
 });
 
-function PodTiles({ pods }: { pods: Pod[] }) {
+function PodTiles({ pods, query }: { pods: Pod[]; query: string }) {
+  const { visible } = useMemo(() => selectMapPods(pods, query, MAX_PODS), [pods, query]);
+  const remaining = pods.length - visible.length;
   return (
     <Grid columns={{ minWidth: 40 }} gap={1} align="start">
-      {pods.slice(0, MAX_PODS).map((pod) => <PodTile key={`${pod.namespace}/${pod.name}`} pod={pod} />)}
-      {pods.length > MAX_PODS && (
-        <Tooltip content={`${pods.length - MAX_PODS} additional pods in this group`}>
+      {visible.map((pod) => <PodTile key={`${pod.namespace}/${pod.name}`} pod={pod} searchMatch={query ? matchesPodName(pod, query) : undefined} />)}
+      {remaining > 0 && (
+        <Tooltip content={`${remaining} additional ${query ? 'nonmatching ' : ''}pods in this group`}>
           <VStack height="var(--spacing-10)" hAlign="center" vAlign="center">
-            <Text type="supporting">+{pods.length - MAX_PODS}</Text>
+            <Text type="supporting">+{remaining}</Text>
           </VStack>
         </Tooltip>
       )}
@@ -100,19 +114,25 @@ function NodeCaption({ node, name }: { node?: Node; name: string }) {
   );
 }
 
-const PodGroup = memo(function PodGroup({ pods, node, name }: { pods: Pod[]; node?: Node; name: string }) {
+const PodGroup = memo(function PodGroup({ pods, node, name, query }: { pods: Pod[]; node?: Node; name: string; query: string }) {
+  const matchCount = query ? pods.filter(pod => matchesPodName(pod, query)).length : 0;
   return (
     <VStack gap={2} paddingBlock={3} style={{ minWidth: 0 }}>
-      <Text type="label">{pods.length} {pods.length === 1 ? 'pod' : 'pods'}</Text>
-      <PodTiles pods={pods} />
+      <Text type="label">{pods.length} {pods.length === 1 ? 'pod' : 'pods'}{query ? ` · ${matchCount} ${matchCount === 1 ? 'match' : 'matches'}` : ''}</Text>
+      <PodTiles pods={pods} query={query} />
       <NodeCaption node={node} name={name} />
     </VStack>
   );
 });
 
 export default function ComputeMapView({ cluster, nodes }: { cluster: Cluster; nodes: Node[] }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFindShortcut(searchRef);
+  const query = searchQuery.trim().toLowerCase();
   const podsQ = useFetch<Pod[]>(`/api/clusters/${encodeURIComponent(cluster.name)}/pods`);
   const podCount = podsQ.data?.length ?? 0;
+  const matchCount = useMemo(() => query ? (podsQ.data || []).filter(pod => matchesPodName(pod, query)).length : 0, [podsQ.data, query]);
   const { groups, unscheduled, counts, emptyNodeCount } = useMemo(() => {
     const byNode = new Map<string, Pod[]>();
     const unscheduled: Pod[] = [];
@@ -150,15 +170,18 @@ export default function ComputeMapView({ cluster, nodes }: { cluster: Cluster; n
             ))}
           </HStack>
         </HStack>
+        <TextInput label="Search pod names" isLabelHidden size="sm" placeholder="Search pod names..." startIcon="search" hasClear
+          ref={searchRef} value={searchQuery} onChange={setSearchQuery} />
+        {query && <Text type="supporting" role="status" aria-live="polite">{matchCount ? `${matchCount} matching ${matchCount === 1 ? 'pod' : 'pods'} highlighted across all nodes.` : `No pods match “${searchQuery.trim()}”.`}</Text>}
         <Text type="supporting" size="2xs">Each tile is a pod. Hover or focus for details.</Text>
         {unscheduled.length > 0 && (
           <VStack gap={2} maxWidth="calc(var(--spacing-10) * 8)">
             <Text type="label">{unscheduled.length} unscheduled {unscheduled.length === 1 ? 'pod' : 'pods'}</Text>
-            <PodTiles pods={unscheduled} />
+            <PodTiles pods={unscheduled} query={query} />
           </VStack>
         )}
         <Grid columns={{ minWidth: 280 }} columnGap={6} rowGap={3} align="start">
-          {groups.map((group) => <PodGroup key={group.name} {...group} />)}
+          {groups.map((group) => <PodGroup key={group.name} {...group} query={query} />)}
         </Grid>
         {emptyNodeCount > 0 && <Text type="supporting" size="2xs">{emptyNodeCount} {emptyNodeCount === 1 ? 'node has' : 'nodes have'} no pods</Text>}
       </VStack>

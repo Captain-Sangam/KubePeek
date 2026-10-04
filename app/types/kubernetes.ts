@@ -62,6 +62,13 @@ export interface Pod {
   nodeGroup?: string;
   creationTimestamp: string; // relative age string, e.g. "2d" (kept for back-compat)
   createdAt?: string; // ISO timestamp
+  runningSince?: string; // Oldest start of a currently running regular container
+  readyContainers?: number;
+  containerCount?: number;
+  qosClass?: string;
+  podIP?: string;
+  owner?: { kind: string; name: string };
+  serviceAccountName?: string;
   restarts?: number;
   cpuRequest?: string; // formatted, e.g. "100m"
   cpuLimit?: string;
