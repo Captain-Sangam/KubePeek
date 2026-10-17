@@ -6,7 +6,10 @@ import { Text } from '@astryxdesign/core/Text';
 import { Divider } from '@astryxdesign/core/Divider';
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
-import { Network, Boxes, Server, Package, Sailboat, KeyRound, Split, Gauge, Layers } from 'lucide-react';
+import {
+  Network, Boxes, Server, Package, Sailboat, KeyRound, Split, Gauge, Layers,
+  Database, ServerCog, CirclePlay, CalendarClock, ShieldCheck,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ActiveView } from '../types/kubernetes';
 
@@ -29,11 +32,21 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: 'Workloads',
     items: [
       { view: 'pods', label: 'Pods', icon: Package },
+      { view: 'deployments', label: 'Deployments', icon: Layers },
+      { view: 'statefulsets', label: 'StatefulSets', icon: Database },
+      { view: 'daemonsets', label: 'DaemonSets', icon: ServerCog },
+      { view: 'jobs', label: 'Jobs', icon: CirclePlay },
+      { view: 'cronjobs', label: 'CronJobs', icon: CalendarClock },
+      { view: 'hpa', label: 'HPA', icon: Gauge },
+      { view: 'pdbs', label: 'PDBs', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Config & Network',
+    items: [
       { view: 'helm', label: 'Helm', icon: Sailboat },
       { view: 'secrets', label: 'Secrets', icon: KeyRound },
       { view: 'ingresses', label: 'Ingresses', icon: Split },
-      { view: 'hpa', label: 'HPA', icon: Gauge },
-      { view: 'deployments', label: 'Deployments', icon: Layers },
     ],
   },
 ];

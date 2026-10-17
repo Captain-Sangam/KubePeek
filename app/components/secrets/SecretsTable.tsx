@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Table, proportional, pixel, useTableSortable, useTableSortableState } from '@astryxdesign/core/Table';
 import { HStack, StackItem } from '@astryxdesign/core/Stack';
 import { TextInput } from '@astryxdesign/core/TextInput';
@@ -26,12 +26,11 @@ interface SecretsTableProps {
   namespacesError: string | null;
   onNamespaceChange: (ns: string) => void;
   onRetryNamespaces: () => void;
-  onAuthError: () => void;
 }
 
 export default function SecretsTable({
   cluster, namespace, namespaces, namespacesLoading, namespacesError,
-  onNamespaceChange, onRetryNamespaces, onAuthError,
+  onNamespaceChange, onRetryNamespaces,
 }: SecretsTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTls, setShowTls] = useState(false);
@@ -39,16 +38,12 @@ export default function SecretsTable({
   const searchRef = useRef<HTMLInputElement>(null);
   useFindShortcut(searchRef);
 
-  const { data, loading, error, authError, refetch } = useFetch<SecretSummary[]>(
+  const { data, loading, error, refetch } = useFetch<SecretSummary[]>(
     namespace
       ? `/api/clusters/${encodeURIComponent(cluster.name)}/secrets?namespace=${encodeURIComponent(namespace)}`
       : null
   );
   const secrets = useMemo(() => data || [], [data]);
-
-  useEffect(() => {
-    if (authError) onAuthError();
-  }, [authError, onAuthError]);
 
   const filtered = secrets.filter((s) => {
     if (!showTls && s.type === 'kubernetes.io/tls') return false;

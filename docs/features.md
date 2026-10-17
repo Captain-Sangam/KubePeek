@@ -3,7 +3,7 @@
 ## Clusters & navigation
 
 - Reads every context from your kubeconfig (`$KUBECONFIG` → `~/.kube/config` → common fallbacks).
-- The left sidebar has two parts: a **compact cluster selector** at the top and a **navigation tree** below, grouped into **Compute** (Node Groups, Nodes, Compute Map) and **Workloads** (Pods, Helm, Secrets, Ingresses, HPA, Deployments).
+- The left sidebar has two parts: a **compact cluster selector** at the top and a **navigation tree** below, grouped into **Compute** (Compute Map, Node Groups, Nodes), **Workloads** (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, HPA, PDBs) and **Config & Network** (Helm, Secrets, Ingresses).
 - The main pane is **tabbed**: clicking a sidebar item opens that view as a tab (or focuses it if already open — one tab per view, closable with ×). Each open tab keeps its own state — search text, sorting, namespace, loaded data — when you switch away and back. The app opens on a Pods tab.
 - **Namespace memory**: opening a new namespace-scoped tab defaults to the last namespace you picked in any tab (skipping the picker); after that each tab's namespace is independent.
 - Rename any cluster to a friendly display name (stored locally) from the selector's menu.
@@ -20,7 +20,7 @@ Only the active view polls. Switching away keeps its data, search, sorting and s
 |---|---|
 | Nodes, Node Groups, scoped Pods | 15 seconds |
 | Open pod overview | 15 seconds while the Pods view is active |
-| Namespace choices, Secrets list, Helm list and open release detail, Deployments, Ingresses, HPA, open pod events | 30 seconds |
+| Namespace choices, Secrets list, Helm list and open release detail, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, HPA, PDBs, Ingresses, open pod events | 30 seconds |
 | Compute Map nodes and cluster-wide pods | 45 seconds |
 | Decoded secret values | Manual reveal only |
 | Pod logs | Manual refresh or a container/tail selection change |
@@ -125,10 +125,18 @@ A **delete** action (with confirmation) is available in the drawer header; on su
 
 ![Namespace-scoped Helm releases without a repeated namespace column](../assets/helm.png)
 
-## Deployments, Ingresses & HPA
+## Workload lists, HPA, PDBs & Ingresses
 
-All three follow the same scoped pattern as Secrets: pick a namespace, then a searchable, sortable table (Cmd+F works), with the namespace changeable from the toolbar.
+All of these follow the same scoped pattern as Secrets: pick a namespace, then a searchable, sortable table (Cmd+F works), with the namespace changeable from the toolbar. Every table ends with an Age column.
 
-- **Deployments** — ready (highlighted when below desired), up-to-date, and available replica counts, plus age.
-- **Ingresses** — ingress class, hosts, load-balancer address, age.
+- **Deployments** and **StatefulSets** — ready (highlighted when below desired), up-to-date, and available replica counts.
+- **DaemonSets** — desired, current, ready (highlighted when below desired), up-to-date and available pod counts, plus the node selector.
+- **Jobs** — status, completions, duration, and the CronJob that created it. Status reads, in order: **Failed** or **Complete** once Kubernetes sets that condition; **Suspended** when `spec.suspend` is set; **Pending** before the Job has started; otherwise **Running**. A Job that is still shutting down its pods after reaching a verdict (the `FailureTarget` / `SuccessCriteriaMet` conditions) reads Running until the final condition lands. Work-queue Jobs with no completion target show only their succeeded count. Duration is blank while Pending or Suspended.
+- **CronJobs** — schedule (with its time zone when set), suspended, active Jobs, and how long ago it last ran and last succeeded (`—` if never).
 - **HPA** — scale target reference, min/max/current replicas, and current-vs-target metrics (e.g. `cpu: 62%/80%`), read from `autoscaling/v2`.
+- **PDBs** — min available / max unavailable as written (`1`, `50%`), allowed disruptions (highlighted at 0 when the budget covers pods, since that blocks voluntary evictions such as node drains), healthy vs desired pods, and the selector. Selectors render `matchLabels` as `k=v` and `matchExpressions` as `k in (a,b)`, `k notin (a)`, `k` or `!k`; an empty selector shows "all pods" and a missing one "no pods" (policy/v1 semantics).
+- **Ingresses** — ingress class, hosts, load-balancer address.
+
+If your RBAC role can't list a resource, that table shows Kubernetes' "forbidden" message and the other views keep working. If the cluster doesn't serve the API (CronJobs and PDBs need Kubernetes 1.21+), the table says so.
+
+The Jobs list isn't capped, because the Kubernetes list API can't sort by time, so a cap would hide an arbitrary set of Jobs (including failed ones). Measured with 3,000 Jobs in one namespace (`next dev`, Apple Silicon): first render about 0.8 s, a search keystroke 0.15–0.5 s, a sort about 0.4 s, and refreshes keep the rows in place. Namespaces that pile up finished Jobs stay usable, but set `ttlSecondsAfterFinished` on Jobs (or `successfulJobsHistoryLimit` / `failedJobsHistoryLimit` on CronJobs) to keep them small.

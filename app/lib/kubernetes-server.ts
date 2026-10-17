@@ -17,6 +17,12 @@ import {
   SecretSummary,
   SecretDetail,
   DeploymentSummary,
+  StatefulSetSummary,
+  DaemonSetSummary,
+  JobSummary,
+  JobStatus,
+  CronJobSummary,
+  PdbSummary,
   IngressSummary,
   HpaSummary,
 } from '../types/kubernetes';
@@ -397,6 +403,8 @@ export const getClientForCluster = (clusterName: string): {
   appsClient: k8s.AppsV1Api;
   networkingClient: k8s.NetworkingV1Api;
   autoscalingClient: k8s.AutoscalingV2Api;
+  batchClient: k8s.BatchV1Api;
+  policyClient: k8s.PolicyV1Api;
 } => {
   const kc = loadKubeConfig();
   const availableContexts = kc.getContexts().map(c => c.name);
@@ -522,8 +530,10 @@ export const getClientForCluster = (clusterName: string): {
   const appsClient = kc.makeApiClient(k8s.AppsV1Api);
   const networkingClient = kc.makeApiClient(k8s.NetworkingV1Api);
   const autoscalingClient = kc.makeApiClient(k8s.AutoscalingV2Api);
+  const batchClient = kc.makeApiClient(k8s.BatchV1Api);
+  const policyClient = kc.makeApiClient(k8s.PolicyV1Api);
 
-  return { coreClient, metricsClient, appsClient, networkingClient, autoscalingClient };
+  return { coreClient, metricsClient, appsClient, networkingClient, autoscalingClient, batchClient, policyClient };
 };
 
 // Get nodes for a cluster
@@ -1167,6 +1177,45 @@ const relativeAge = (iso: string): string => {
   return `${Math.max(0, Math.floor(diffMs / 1000))}s`;
 };
 
+const iso = (d?: Date): string => (d ? new Date(d).toISOString() : '');
+
+// Fields every list summary shares.
+const summaryMeta = (meta?: k8s.V1ObjectMeta) => {
+  const createdAt = iso(meta?.creationTimestamp);
+  return {
+    name: meta?.name || 'unknown',
+    namespace: meta?.namespace || 'default',
+    createdAt,
+    age: relativeAge(createdAt),
+  };
+};
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+
+// "k=v, k2=v2" for a plain label map (e.g. a DaemonSet nodeSelector).
+const formatLabels = (labels?: Record<string, string>): string =>
+  Object.entries(labels || {}).map(([k, v]) => `${k}=${v}`).join(', ');
+
+// Render a policy/v1 label selector. In policy/v1 a missing selector matches
+// no pods and an empty one ({}) matches every pod in the namespace.
+const formatSelector = (sel?: k8s.V1LabelSelector): string => {
+  if (!sel) return 'no pods';
+  const parts = [
+    formatLabels(sel.matchLabels),
+    ...(sel.matchExpressions || []).map(e => {
+      const values = (e.values || []).join(',');
+      switch (e.operator) {
+        case 'In': return `${e.key} in (${values})`;
+        case 'NotIn': return `${e.key} notin (${values})`;
+        case 'Exists': return e.key;
+        case 'DoesNotExist': return `!${e.key}`;
+        default: return `${e.key} ${e.operator} (${values})`;
+      }
+    }),
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : 'all pods';
+};
+
 // Get structured pod detail (Lens-like).
 export const getPodDetail = async (
   clusterName: string,
@@ -1374,91 +1423,155 @@ export const listNamespaces = async (clusterName: string): Promise<string[]> => 
     .sort();
 };
 
-// List deployments in a namespace (or all namespaces).
-export const listDeployments = async (
-  clusterName: string,
-  namespace?: string
-): Promise<DeploymentSummary[]> => {
-  const { appsClient } = getClientForCluster(clusterName);
-
-  const resp = namespace
-    ? await appsClient.listNamespacedDeployment(namespace)
-    : await appsClient.listDeploymentForAllNamespaces();
-
-  return resp.body.items
-    .map(d => {
-      const desired = d.spec?.replicas ?? 0;
-      const readyCount = d.status?.readyReplicas ?? 0;
-      const createdAt = d.metadata?.creationTimestamp
-        ? new Date(d.metadata.creationTimestamp).toISOString()
-        : '';
-      return {
-        name: d.metadata?.name || 'unknown',
-        namespace: d.metadata?.namespace || 'default',
-        ready: `${readyCount}/${desired}`,
-        readyCount,
-        desired,
-        upToDate: d.status?.updatedReplicas ?? 0,
-        available: d.status?.availableReplicas ?? 0,
-        createdAt,
-        age: relativeAge(createdAt)
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+// Replica counts shared by Deployments and StatefulSets.
+const replicaSummary = (
+  meta: k8s.V1ObjectMeta | undefined,
+  desired: number,
+  status?: { readyReplicas?: number; updatedReplicas?: number; availableReplicas?: number }
+): DeploymentSummary => {
+  const readyCount = status?.readyReplicas ?? 0;
+  return {
+    ...summaryMeta(meta),
+    ready: `${readyCount}/${desired}`,
+    readyCount,
+    desired,
+    upToDate: status?.updatedReplicas ?? 0,
+    available: status?.availableReplicas ?? 0,
+  };
 };
 
-// List ingresses in a namespace (or all namespaces).
-export const listIngresses = async (
-  clusterName: string,
-  namespace?: string
-): Promise<IngressSummary[]> => {
+// The listers below back app/api/clusters/[cluster]/resources/[resource] and
+// always take a namespace: no view lists across all namespaces.
+
+export const listDeployments = async (clusterName: string, namespace: string): Promise<DeploymentSummary[]> => {
+  const { appsClient } = getClientForCluster(clusterName);
+  const { body } = await appsClient.listNamespacedDeployment(namespace);
+  return body.items.map(d => replicaSummary(d.metadata, d.spec?.replicas ?? 0, d.status)).sort(byName);
+};
+
+export const listStatefulSets = async (clusterName: string, namespace: string): Promise<StatefulSetSummary[]> => {
+  const { appsClient } = getClientForCluster(clusterName);
+  const { body } = await appsClient.listNamespacedStatefulSet(namespace);
+  return body.items.map(s => replicaSummary(s.metadata, s.spec?.replicas ?? 0, s.status)).sort(byName);
+};
+
+export const listDaemonSets = async (clusterName: string, namespace: string): Promise<DaemonSetSummary[]> => {
+  const { appsClient } = getClientForCluster(clusterName);
+  const { body } = await appsClient.listNamespacedDaemonSet(namespace);
+  return body.items
+    .map(d => ({
+      ...summaryMeta(d.metadata),
+      desired: d.status?.desiredNumberScheduled ?? 0,
+      current: d.status?.currentNumberScheduled ?? 0,
+      ready: d.status?.numberReady ?? 0,
+      upToDate: d.status?.updatedNumberScheduled ?? 0,
+      available: d.status?.numberAvailable ?? 0,
+      nodeSelector: formatLabels(d.spec?.template?.spec?.nodeSelector),
+    }))
+    .sort(byName);
+};
+
+export const listJobs = async (clusterName: string, namespace: string): Promise<JobSummary[]> => {
+  const { batchClient } = getClientForCluster(clusterName);
+  // ponytail: uncapped, like the Pods scopes. A namespace with thousands of
+  // retained Jobs renders slowly; switch on the astryx Table pagination plugin
+  // (render cost) or list paging via `limit`/`_continue` (fetch cost) if it bites.
+  const { body } = await batchClient.listNamespacedJob(namespace);
+  return body.items
+    .map(j => {
+      const condition = (type: string) =>
+        j.status?.conditions?.find(c => c.type === type && c.status === 'True');
+      const failed = condition('Failed');
+      // Only Failed/Complete are terminal. FailureTarget and SuccessCriteriaMet
+      // are set first, while the Job's pods are still terminating, so such a
+      // Job reads Running until the terminal condition lands.
+      const status: JobStatus = failed ? 'Failed'
+        : condition('Complete') ? 'Complete'
+        : j.spec?.suspend ? 'Suspended'
+        : !j.status?.startTime ? 'Pending'
+        : 'Running';
+      // Failed Jobs have no completionTime; use when the Failed condition landed.
+      const end = j.status?.completionTime ?? failed?.lastTransitionTime;
+      const durationMs = j.status?.startTime && status !== 'Suspended'
+        ? (end ? new Date(end).getTime() : Date.now()) - new Date(j.status.startTime).getTime()
+        : null;
+      const succeeded = j.status?.succeeded ?? 0;
+      return {
+        ...summaryMeta(j.metadata),
+        status,
+        // Work-queue Jobs have no completion target: show the succeeded count alone.
+        completions: j.spec?.completions != null ? `${succeeded}/${j.spec.completions}` : `${succeeded}`,
+        succeeded,
+        failed: j.status?.failed ?? 0,
+        active: j.status?.active ?? 0,
+        owner: j.metadata?.ownerReferences?.find(o => o.kind === 'CronJob')?.name || '',
+        durationMs,
+      };
+    })
+    .sort(byName);
+};
+
+export const listCronJobs = async (clusterName: string, namespace: string): Promise<CronJobSummary[]> => {
+  const { batchClient } = getClientForCluster(clusterName);
+  const { body } = await batchClient.listNamespacedCronJob(namespace);
+  return body.items
+    .map(c => ({
+      ...summaryMeta(c.metadata),
+      schedule: c.spec?.schedule || '',
+      timeZone: c.spec?.timeZone || '',
+      suspend: c.spec?.suspend ?? false,
+      active: c.status?.active?.length ?? 0,
+      lastScheduleTime: iso(c.status?.lastScheduleTime),
+      lastSuccessfulTime: iso(c.status?.lastSuccessfulTime),
+    }))
+    .sort(byName);
+};
+
+// IntOrString as written: 0 stays "0", "50%" stays "50%", unset is ''.
+const intOrString = (v?: k8s.IntOrString): string => (v == null ? '' : String(v));
+
+export const listPdbs = async (clusterName: string, namespace: string): Promise<PdbSummary[]> => {
+  const { policyClient } = getClientForCluster(clusterName);
+  const { body } = await policyClient.listNamespacedPodDisruptionBudget(namespace);
+  return body.items
+    .map(p => ({
+      ...summaryMeta(p.metadata),
+      minAvailable: intOrString(p.spec?.minAvailable),
+      maxUnavailable: intOrString(p.spec?.maxUnavailable),
+      allowedDisruptions: p.status?.disruptionsAllowed ?? 0,
+      currentHealthy: p.status?.currentHealthy ?? 0,
+      desiredHealthy: p.status?.desiredHealthy ?? 0,
+      expectedPods: p.status?.expectedPods ?? 0,
+      selector: formatSelector(p.spec?.selector),
+    }))
+    .sort(byName);
+};
+
+export const listIngresses = async (clusterName: string, namespace: string): Promise<IngressSummary[]> => {
   const { networkingClient } = getClientForCluster(clusterName);
-
-  const resp = namespace
-    ? await networkingClient.listNamespacedIngress(namespace)
-    : await networkingClient.listIngressForAllNamespaces();
-
-  return resp.body.items
-    .map(ing => {
-      const createdAt = ing.metadata?.creationTimestamp
-        ? new Date(ing.metadata.creationTimestamp).toISOString()
-        : '';
-      const address = (ing.status?.loadBalancer?.ingress || [])
+  const { body } = await networkingClient.listNamespacedIngress(namespace);
+  return body.items
+    .map(ing => ({
+      ...summaryMeta(ing.metadata),
+      className:
+        ing.spec?.ingressClassName ||
+        ing.metadata?.annotations?.['kubernetes.io/ingress.class'] ||
+        '',
+      hosts: (ing.spec?.rules || []).map(r => r.host || '*').filter(Boolean),
+      address: (ing.status?.loadBalancer?.ingress || [])
         .map(lb => lb.hostname || lb.ip || '')
         .filter(Boolean)
-        .join(', ');
-      return {
-        name: ing.metadata?.name || 'unknown',
-        namespace: ing.metadata?.namespace || 'default',
-        className:
-          ing.spec?.ingressClassName ||
-          ing.metadata?.annotations?.['kubernetes.io/ingress.class'] ||
-          '',
-        hosts: (ing.spec?.rules || []).map(r => r.host || '*').filter(Boolean),
-        address,
-        createdAt,
-        age: relativeAge(createdAt)
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+        .join(', '),
+    }))
+    .sort(byName);
 };
 
-// List horizontal pod autoscalers (autoscaling/v2) in a namespace (or all).
-export const listHpas = async (
-  clusterName: string,
-  namespace?: string
-): Promise<HpaSummary[]> => {
+// Horizontal pod autoscalers (autoscaling/v2).
+export const listHpas = async (clusterName: string, namespace: string): Promise<HpaSummary[]> => {
   const { autoscalingClient } = getClientForCluster(clusterName);
-
-  const resp = namespace
-    ? await autoscalingClient.listNamespacedHorizontalPodAutoscaler(namespace)
-    : await autoscalingClient.listHorizontalPodAutoscalerForAllNamespaces();
-
-  return resp.body.items
+  const { body } = await autoscalingClient.listNamespacedHorizontalPodAutoscaler(namespace);
+  return body.items
     .map(h => {
-      const createdAt = h.metadata?.creationTimestamp
-        ? new Date(h.metadata.creationTimestamp).toISOString()
-        : '';
       // Compact "cpu: 62%/80%" per resource metric; other metric types by name.
       const targets = (h.spec?.metrics || [])
         .map(m => {
@@ -1473,18 +1586,15 @@ export const listHpas = async (
         })
         .join(', ');
       return {
-        name: h.metadata?.name || 'unknown',
-        namespace: h.metadata?.namespace || 'default',
+        ...summaryMeta(h.metadata),
         reference: `${h.spec?.scaleTargetRef?.kind || '?'}/${h.spec?.scaleTargetRef?.name || '?'}`,
         targets,
         minReplicas: h.spec?.minReplicas ?? 1,
         maxReplicas: h.spec?.maxReplicas ?? 0,
         currentReplicas: h.status?.currentReplicas ?? 0,
-        createdAt,
-        age: relativeAge(createdAt)
       };
     })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(byName);
 };
 
 // List secrets across namespaces (or one namespace). Values are NOT included.

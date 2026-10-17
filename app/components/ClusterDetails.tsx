@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type ComponentType } from 'react';
 import { Tab, TabList } from '@astryxdesign/core/TabList';
 import { Icon } from '@astryxdesign/core/Icon';
 import { Text } from '@astryxdesign/core/Text';
@@ -10,9 +10,10 @@ import NodesTable from './nodes/NodesTable';
 import PodsTable from './pods/PodsTable';
 import SecretsTable from './secrets/SecretsTable';
 import HelmReleasesTable from './helm/HelmReleasesTable';
-import DeploymentsTable from './workloads/DeploymentsTable';
-import IngressesTable from './workloads/IngressesTable';
-import HpaTable from './workloads/HpaTable';
+import {
+  DeploymentsTable, StatefulSetsTable, DaemonSetsTable, JobsTable, CronJobsTable, HpaTable, PdbsTable, IngressesTable,
+} from './workloads/WorkloadTables';
+import type { NsTableProps } from './shared/NamespacedResourceTable';
 import PanelState from './shared/PanelState';
 import ScopePicker from './shared/ScopePicker';
 import ReconnectBanner from './shared/ReconnectBanner';
@@ -21,6 +22,22 @@ import { useFetch } from '../hooks/useFetch';
 import { groupNodes } from '../lib/node-groups';
 import { RefreshContext, combineFreshness, type Freshness, type ViewStatus } from '../lib/RefreshContext';
 import { VIEW_LABELS } from '../lib/views';
+
+// Every namespace-gated view except Pods (which uses a scope object). Each gets
+// its own namespace, seeded from the last one picked when its tab opens.
+const NS_TABLES: Partial<Record<ActiveView, ComponentType<NsTableProps>>> = {
+  helm: HelmReleasesTable,
+  secrets: SecretsTable,
+  deployments: DeploymentsTable,
+  statefulsets: StatefulSetsTable,
+  daemonsets: DaemonSetsTable,
+  jobs: JobsTable,
+  cronjobs: CronJobsTable,
+  hpa: HpaTable,
+  pdbs: PdbsTable,
+  ingresses: IngressesTable,
+};
+const NS_VIEWS = Object.keys(NS_TABLES) as ActiveView[];
 
 interface ClusterDetailsProps {
   cluster: Cluster;
@@ -33,11 +50,8 @@ interface ClusterDetailsProps {
 
 export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigate, onCloseTab, onViewStatusChange }: ClusterDetailsProps) {
   const [podsScope, setPodsScope] = useState<PodsScope | null>(null);
-  const [helmNamespace, setHelmNamespace] = useState<string | null>(null);
-  const [secretsNamespace, setSecretsNamespace] = useState<string | null>(null);
-  const [ingressesNamespace, setIngressesNamespace] = useState<string | null>(null);
-  const [hpaNamespace, setHpaNamespace] = useState<string | null>(null);
-  const [deploymentsNamespace, setDeploymentsNamespace] = useState<string | null>(null);
+  const [nsByView, setNsByView] = useState<Partial<Record<ActiveView, string | null>>>({});
+  const setNs = (view: ActiveView, ns: string | null) => setNsByView((prev) => ({ ...prev, [view]: ns }));
   const [lastNamespace, setLastNamespace] = useState<string | null>(null);
   const [authExpired, setAuthExpired] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -54,26 +68,8 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
 
   const base = `/api/clusters/${encodeURIComponent(cluster.name)}`;
 
-  // Every namespace-scoped view except pods (which uses a scope object).
-  const nsViews: [ActiveView, string | null, (ns: string | null) => void][] = [
-    ['helm', helmNamespace, setHelmNamespace],
-    ['secrets', secretsNamespace, setSecretsNamespace],
-    ['ingresses', ingressesNamespace, setIngressesNamespace],
-    ['hpa', hpaNamespace, setHpaNamespace],
-    ['deployments', deploymentsNamespace, setDeploymentsNamespace],
-  ];
-
-  // Reset per-cluster scope when the cluster changes.
-  useEffect(() => {
-    setPodsScope(null);
-    setHelmNamespace(null);
-    setSecretsNamespace(null);
-    setIngressesNamespace(null);
-    setHpaNamespace(null);
-    setDeploymentsNamespace(null);
-    setLastNamespace(null);
-    setAuthExpired(false);
-  }, [cluster.name]);
+  // No per-cluster reset needed: Dashboard keys this component by cluster name,
+  // so switching clusters remounts it with fresh state.
 
   // Tab lifecycle: closed tabs drop their scope (so reopening re-seeds);
   // newly opened tabs with no scope yet default to the last selected namespace.
@@ -84,10 +80,10 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
     if (prev.includes('pods') && !openTabs.includes('pods')) setPodsScope(null);
     else if (lastNamespace && !prev.includes('pods') && openTabs.includes('pods') && !podsScope)
       setPodsScope({ type: 'namespace', value: lastNamespace });
-    for (const [view, ns, setNs] of nsViews) {
-      if (prev.includes(view) && !openTabs.includes(view)) setNs(null);
-      else if (lastNamespace && !prev.includes(view) && openTabs.includes(view) && !ns)
-        setNs(lastNamespace);
+    for (const view of NS_VIEWS) {
+      if (prev.includes(view) && !openTabs.includes(view)) setNs(view, null);
+      else if (lastNamespace && !prev.includes(view) && openTabs.includes(view) && !nsByView[view])
+        setNs(view, lastNamespace);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTabs]);
@@ -147,7 +143,7 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
 
   const scope = activeTab === 'pods'
     ? (podsScope ? `${podsScope.type === 'namespace' ? 'Namespace' : podsScope.type === 'node' ? 'Node' : 'Node group'}: ${podsScope.value}` : null)
-    : nsViews.find(([view]) => view === activeTab)?.[1] ?? null;
+    : (activeTab && nsByView[activeTab]) ?? null;
   const primary = activeTab === 'nodes' || activeTab === 'nodeGroups' || activeTab === 'computeMap' ? nodesQ
     : activeTab === 'pods' && podsScope ? podsQ : namespacesQ;
   const { lastUpdated, isRefreshing, refreshError } = combineFreshness([primary, ...Object.values(childFreshness)]);
@@ -223,91 +219,24 @@ export default function ClusterDetails({ cluster, openTabs, activeTab, onNavigat
             />
           </PanelState>
         );
-      case 'secrets':
-        return (
-          <SecretsTable
-            key={`secrets-${reloadNonce}`}
+      default: {
+        const NsTable = NS_TABLES[view];
+        return NsTable && (
+          <NsTable
+            key={`${view}-${reloadNonce}`}
             cluster={cluster}
-            namespace={secretsNamespace}
+            namespace={nsByView[view] ?? null}
             namespaces={namespaces}
             namespacesLoading={namespacesQ.loading}
             namespacesError={namespacesQ.error}
             onNamespaceChange={(ns) => {
-              setSecretsNamespace(ns);
+              setNs(view, ns);
               setLastNamespace(ns);
             }}
             onRetryNamespaces={namespacesQ.refetch}
-            onAuthError={handleAuthError}
           />
         );
-      case 'helm':
-        return (
-          <HelmReleasesTable
-            key={`helm-${reloadNonce}`}
-            cluster={cluster}
-            namespace={helmNamespace}
-            namespaces={namespaces}
-            namespacesLoading={namespacesQ.loading}
-            namespacesError={namespacesQ.error}
-            onNamespaceChange={(ns) => {
-              setHelmNamespace(ns);
-              setLastNamespace(ns);
-            }}
-            onRetryNamespaces={namespacesQ.refetch}
-            onAuthError={handleAuthError}
-          />
-        );
-      case 'ingresses':
-        return (
-          <IngressesTable
-            key={`ingresses-${reloadNonce}`}
-            cluster={cluster}
-            namespace={ingressesNamespace}
-            namespaces={namespaces}
-            namespacesLoading={namespacesQ.loading}
-            namespacesError={namespacesQ.error}
-            onNamespaceChange={(ns) => {
-              setIngressesNamespace(ns);
-              setLastNamespace(ns);
-            }}
-            onRetryNamespaces={namespacesQ.refetch}
-            onAuthError={handleAuthError}
-          />
-        );
-      case 'hpa':
-        return (
-          <HpaTable
-            key={`hpa-${reloadNonce}`}
-            cluster={cluster}
-            namespace={hpaNamespace}
-            namespaces={namespaces}
-            namespacesLoading={namespacesQ.loading}
-            namespacesError={namespacesQ.error}
-            onNamespaceChange={(ns) => {
-              setHpaNamespace(ns);
-              setLastNamespace(ns);
-            }}
-            onRetryNamespaces={namespacesQ.refetch}
-            onAuthError={handleAuthError}
-          />
-        );
-      case 'deployments':
-        return (
-          <DeploymentsTable
-            key={`deployments-${reloadNonce}`}
-            cluster={cluster}
-            namespace={deploymentsNamespace}
-            namespaces={namespaces}
-            namespacesLoading={namespacesQ.loading}
-            namespacesError={namespacesQ.error}
-            onNamespaceChange={(ns) => {
-              setDeploymentsNamespace(ns);
-              setLastNamespace(ns);
-            }}
-            onRetryNamespaces={namespacesQ.refetch}
-            onAuthError={handleAuthError}
-          />
-        );
+      }
     }
   };
 
