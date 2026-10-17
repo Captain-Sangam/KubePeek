@@ -57,11 +57,9 @@ export const basisLabel = (basis?: ResourceBasis): string => {
   }
 };
 
-// Relative age string from an ISO timestamp: "45s", "12m", "3h", "5d".
-export const formatAge = (iso?: string): string => {
-  if (!iso) return '—';
-  const ms = Date.now() - new Date(iso).getTime();
-  if (isNaN(ms)) return '—';
+// Compact duration: "45s", "12m", "3h", "5d" (largest unit only).
+export const formatDuration = (ms: number | null | undefined): string => {
+  if (ms == null || isNaN(ms)) return '—';
   const days = Math.floor(ms / 86400000);
   const hours = Math.floor((ms % 86400000) / 3600000);
   const mins = Math.floor((ms % 3600000) / 60000);
@@ -71,6 +69,10 @@ export const formatAge = (iso?: string): string => {
   if (mins > 0) return `${mins}m`;
   return `${Math.max(0, secs)}s`;
 };
+
+// Relative age string from an ISO timestamp.
+export const formatAge = (iso?: string): string =>
+  iso ? formatDuration(Date.now() - new Date(iso).getTime()) : '—';
 
 // Full local timestamp for tooltips.
 export const formatFullTimestamp = (iso?: string): string => {

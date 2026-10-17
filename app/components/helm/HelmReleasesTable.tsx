@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Table, proportional, pixel, useTableSortable, useTableSortableState } from '@astryxdesign/core/Table';
 import { HStack, StackItem } from '@astryxdesign/core/Stack';
 import { TextInput } from '@astryxdesign/core/TextInput';
@@ -25,28 +25,23 @@ interface HelmReleasesTableProps {
   namespacesError: string | null;
   onNamespaceChange: (ns: string) => void;
   onRetryNamespaces: () => void;
-  onAuthError: () => void;
 }
 
 export default function HelmReleasesTable({
   cluster, namespace, namespaces, namespacesLoading, namespacesError,
-  onNamespaceChange, onRetryNamespaces, onAuthError,
+  onNamespaceChange, onRetryNamespaces,
 }: HelmReleasesTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selected, setSelected] = useState<HelmReleaseSummary | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   useFindShortcut(searchRef);
 
-  const { data, loading, error, authError, refetch } = useFetch<HelmReleaseSummary[]>(
+  const { data, loading, error, refetch } = useFetch<HelmReleaseSummary[]>(
     namespace
       ? `/api/clusters/${encodeURIComponent(cluster.name)}/helm?namespace=${encodeURIComponent(namespace)}`
       : null
   );
   const releases = useMemo(() => data || [], [data]);
-
-  useEffect(() => {
-    if (authError) onAuthError();
-  }, [authError, onAuthError]);
 
   const filtered = releases.filter((r) => {
     if (!searchQuery) return true;

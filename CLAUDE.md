@@ -8,17 +8,17 @@ Lens-style Kubernetes viewer: Next.js 15 (App Router, TypeScript, React 19, astr
 
 ## UI changes
 
-- Views live in `app/components/<area>/`; reuse `shared/` primitives (`PanelState`, `ScopePicker`, `UsageBar`, `StatusChip`, `CopyButton`) and hooks (`useFetch`, `useFindShortcut` for Cmd+F).
-- The main pane is tabbed: `Dashboard` owns `openTabs`/`activeTab`; `ClusterDetails` owns per-view namespace state, the tab strip, and keeps open tabs mounted (`display: none`). New namespace-scoped views must be added to `nsViews` there to get last-namespace seeding for free.
+- Views live in `app/components/<area>/`; reuse `shared/` primitives (`NamespacedResourceTable`, `PanelState`, `ScopePicker`, `UsageBar`, `StatusChip`, `CopyButton`) and hooks (`useFetch`, `useFindShortcut` for Cmd+F).
+- The main pane is tabbed: `Dashboard` owns `openTabs`/`activeTab`; `ClusterDetails` owns per-view namespace state, the tab strip, and keeps open tabs mounted (`display: none`). New namespace-scoped views are registered in its `NS_TABLES` map, which gives them last-namespace seeding and close-reset for free.
 - Styling is astryx (`@astryxdesign/core` 0.1.8, exact-pinned — beta; bump both astryx packages together and run `npx astryx upgrade --apply`). Dense look: `size="sm"`/`density="compact"` variants. See the ASTRYX section below for the component workflow. Don't introduce Tailwind.
-- Tables: data-driven `Table` + `useTableSortableState` (see `secrets/SecretsTable.tsx` as template); clickable rows via `shared/tableRowClick.ts`; sticky headers via the `.kp-table-scroll` class in `globals.css`. Expandable rows use children mode (`nodes/NodesTable.tsx`).
+- Tables: a plain namespace-scoped list is a column config for `shared/NamespacedResourceTable.tsx` (see `workloads/WorkloadTables.tsx`). Tables with drawers or extra controls use data-driven `Table` + `useTableSortableState` directly (see `secrets/SecretsTable.tsx` as template); clickable rows via `shared/tableRowClick.ts`; sticky headers via the `.kp-table-scroll` class in `globals.css`. Expandable rows use children mode (`nodes/NodesTable.tsx`).
 - Drawers are edge-positioned `Dialog`s (`position={{top:0,right:0,bottom:0}}`, see `pods/PodDetailDrawer.tsx`) — astryx has no Drawer.
 - Icons: semantic names on `Icon` where they exist, else `lucide-react` components.
 - Theme/dark mode: `app/lib/ThemeProvider.tsx` (astryx `<Theme mode>`; localStorage + `dark-theme` class on `<html>` for the legacy CSS vars in `globals.css`).
 
 ## Functionality changes
 
-- New Kubernetes read: server function in `kubernetes-server.ts` → thin route under `app/api/clusters/**` (copy the secrets route, keep the `isAuthError` → `401 auth_expired` branch) → summary type in `app/types/kubernetes.ts`.
+- New Kubernetes read: server function in `kubernetes-server.ts` → summary type in `app/types/kubernetes.ts` → route. A namespace-scoped list just adds its lister to `LISTERS` in `app/api/clusters/[cluster]/resources/[resource]/route.ts`, which already requires a namespace, returns `401 auth_expired`, and forwards Kubernetes' 403/404 message. Any other read gets a thin route under `app/api/clusters/**` (copy the secrets route, keep the `isAuthError` → `401 auth_expired` branch).
 - `@kubernetes/client-node` is **v0.20**: list APIs take long positional args and responses are `{ response, body }` — read `.body`, and don't copy v1.x object-arg examples from upstream docs.
 
 ## Verify

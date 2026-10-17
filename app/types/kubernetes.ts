@@ -16,7 +16,12 @@ export type ActiveView =
   | 'secrets'
   | 'ingresses'
   | 'hpa'
-  | 'deployments';
+  | 'deployments'
+  | 'statefulsets'
+  | 'daemonsets'
+  | 'jobs'
+  | 'cronjobs'
+  | 'pdbs';
 
 // The scope that gates the Pods view. Exactly one type is active at a time.
 export type PodsScope =
@@ -202,6 +207,65 @@ export interface DeploymentSummary {
   desired: number;
   upToDate: number;
   available: number;
+  createdAt: string;
+  age: string;
+}
+
+// StatefulSets show the same replica counts as Deployments.
+export type StatefulSetSummary = DeploymentSummary;
+
+export interface DaemonSetSummary {
+  name: string;
+  namespace: string;
+  desired: number;
+  current: number;
+  ready: number;
+  upToDate: number;
+  available: number;
+  nodeSelector: string; // "k=v, k2=v2"
+  createdAt: string;
+  age: string;
+}
+
+export type JobStatus = 'Complete' | 'Failed' | 'Suspended' | 'Pending' | 'Running';
+
+export interface JobSummary {
+  name: string;
+  namespace: string;
+  status: JobStatus;
+  completions: string; // "3/5", or "3" for work-queue Jobs with no completion target
+  succeeded: number;
+  failed: number;
+  active: number;
+  owner: string; // owning CronJob name, or ''
+  durationMs: number | null; // null when not started or suspended
+  createdAt: string;
+  age: string;
+}
+
+export interface CronJobSummary {
+  name: string;
+  namespace: string;
+  schedule: string;
+  timeZone: string; // '' when unset (controller's local time)
+  suspend: boolean;
+  active: number;
+  lastScheduleTime: string; // ISO, or '' if never scheduled
+  lastSuccessfulTime: string; // ISO, or '' if never succeeded
+  createdAt: string;
+  age: string;
+}
+
+export interface PdbSummary {
+  name: string;
+  namespace: string;
+  minAvailable: string; // as written: "1", "50%", or '' when unset
+  maxUnavailable: string;
+  allowedDisruptions: number;
+  currentHealthy: number;
+  desiredHealthy: number;
+  expectedPods: number;
+  selector: string;
   createdAt: string;
   age: string;
 }

@@ -47,7 +47,7 @@ Then open [localhost:3000](http://localhost:3000) in your browser.
 - Pod detail, per-container metrics, events and manually refreshed logs with a JSON fields filter
 - Namespace-scoped Secrets with masked values, manual reveal and an aligned key grid
 - Read-only Helm releases with values, manifest and revision history
-- Deployments, Ingresses and HPA tables
+- Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, HPA, PDB and Ingress tables
 - Tabs, contextual header, sortable tables, and fast light/dark theme switching
 
 Nodes and Pods refresh every 15 seconds, resource lists every 30 seconds, and Compute Map every 45 seconds while active. Secret values and logs are fetched manually. Missing metrics show `n/a`; reservation billing coverage is deferred. See the [feature guide](features.md) for details.

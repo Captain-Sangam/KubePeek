@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Workload views
+- Added: **StatefulSets, DaemonSets, Jobs, CronJobs and PodDisruptionBudgets** views under Workloads. All are namespace-scoped, searchable and sortable, with Job status from real conditions, CronJob last-run/last-success times, and PDB selectors including `matchExpressions`.
+- Added: readable API errors. A missing RBAC permission shows Kubernetes' "forbidden" message in that table only (no Reconnect banner), and a cluster that doesn't serve an API says so, instead of "HTTP request failed".
+- Changed: the sidebar is regrouped into Compute, Workloads (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, HPA, PDBs) and a new Config & Network section (Helm, Secrets, Ingresses).
+- Changed: the plain list views share one `NamespacedResourceTable` component and one `/api/clusters/[cluster]/resources/[resource]` route, replacing the per-view Deployments/HPA/Ingresses table and route copies. HPA's Age column moved to the end, as in every other table.
+
 ### Ten-improvement plan
 - UI fixes: 100ms theme switching with reduced-motion support; single-line secret keys with hover tooltips and top-aligned values; redundant namespace columns removed (Pods retains them for node/group scopes); compact expanded node rows with bounded usage bars; Memory sorting corrected.
 - Live data: active-view polling keeps rows, scroll and filters during refresh, skips overlapping requests, pauses while hidden or authentication has expired, and reports freshness/stale failures. Node groups reuse the shared nodes response. Missing metrics show `n/a`.
